@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 type FoodCardProps = {
   id: number;
   name: string;
@@ -10,6 +12,8 @@ function FoodCard({
   description,
   price,
 }: FoodCardProps) {
+  const [quantity, setQuantity] = useState(0);
+
   return (
     <div className="bg-zinc-900 rounded-2xl p-5 shadow-lg hover:bg-zinc-800 transition duration-300 flex justify-between items-center">
 
@@ -27,10 +31,36 @@ function FoodCard({
         </p>
       </div>
 
-      <button className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl transition">
-        Add
-      </button>
+      {quantity === 0 ? (
+        <button
+          onClick={() => setQuantity(1)}
+          className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl transition"
+        >
+          Add
+        </button>
+      ) : (
+        <div className="flex items-center gap-4">
 
+          <button
+            onClick={() => setQuantity(quantity - 1)}
+            className="bg-red-600 w-10 h-10 rounded-full text-xl"
+          >
+            −
+          </button>
+
+          <span className="text-xl font-bold">
+            {quantity}
+          </span>
+
+          <button
+            onClick={() => setQuantity(quantity + 1)}
+            className="bg-green-600 w-10 h-10 rounded-full text-xl"
+          >
+            +
+          </button>
+
+        </div>
+      )}
     </div>
   );
 }
