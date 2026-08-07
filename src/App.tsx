@@ -4,7 +4,7 @@ import HeroSection from "./components/layout/HeroSection";
 
 function App() {
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center px-6">
 
       <div className="pt-10">
         <Logo />
