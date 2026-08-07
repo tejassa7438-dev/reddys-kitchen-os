@@ -1,23 +1,16 @@
-import Logo from "./components/layout/Logo";
-import RestaurantHeader from "./components/layout/RestaurantHeader";
-import HeroSection from "./components/layout/HeroSection";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+import WelcomePage from "./pages/Home/WelcomePage";
+import MenuPage from "./pages/Menu/MenuPage";
 
 function App() {
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center px-6">
-
-      <div className="pt-10">
-        <Logo />
-      </div>
-
-      <RestaurantHeader
-        name="REDDY'S KITCHEN"
-        tagline="🌱 Pure Veg Restaurant"
-      />
-
-      <HeroSection />
-
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<WelcomePage />} />
+        <Route path="/menu" element={<MenuPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

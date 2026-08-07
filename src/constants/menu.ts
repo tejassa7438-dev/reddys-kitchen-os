@@ -4,7 +4,7 @@ export const menuItems = [
     name: "Masala Dosa",
     category: "Breakfast",
     price: 80,
-    description: "Crispy dosa served with chutney & sambar",
+    description: "Crispy dosa with chutney & sambar",
   },
   {
     id: 2,
@@ -18,7 +18,7 @@ export const menuItems = [
     name: "Veg Fried Rice",
     category: "Chinese",
     price: 170,
-    description: "Fried rice with fresh vegetables",
+    description: "Fried rice with vegetables",
   },
   {
     id: 4,
@@ -32,6 +32,13 @@ export const menuItems = [
     name: "Paneer Butter Masala",
     category: "North Indian",
     price: 220,
-    description: "Paneer cooked in rich butter gravy",
+    description: "Paneer in rich butter gravy",
+  },
+  {
+    id: 6,
+    name: "Butter Naan",
+    category: "North Indian",
+    price: 40,
+    description: "Fresh tandoor naan",
   },
 ];

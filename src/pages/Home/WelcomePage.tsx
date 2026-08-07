@@ -6,7 +6,7 @@ function WelcomePage() {
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6">
-      
+
       <h2 className="text-4xl font-bold text-red-600">
         Welcome 👋
       </h2>
@@ -20,18 +20,18 @@ function WelcomePage() {
       </p>
 
       <div className="mt-10 bg-zinc-900 rounded-2xl p-8 w-full max-w-md text-center shadow-xl">
-        
+
         <p className="text-gray-400">
           You are ordering for
         </p>
 
-        <h1 className="text-5xl font-bold mt-2 text-white">
+        <h1 className="text-5xl font-bold mt-2">
           TABLE 5
         </h1>
 
         <button
           onClick={() => navigate("/menu")}
-          className="mt-8 w-full bg-red-600 hover:bg-red-700 rounded-xl py-4 text-lg font-semibold transition duration-300"
+          className="mt-8 w-full bg-red-600 hover:bg-red-700 rounded-xl py-4 text-lg font-semibold transition"
         >
           🍽 Browse Menu
         </button>

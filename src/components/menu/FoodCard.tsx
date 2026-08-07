@@ -11,24 +11,26 @@ function FoodCard({
   price,
 }: FoodCardProps) {
   return (
-    <div className="bg-zinc-900 rounded-xl p-5 flex justify-between items-center hover:bg-zinc-800 transition">
-      <div>
-        <h2 className="text-xl font-bold text-white">
+    <div className="bg-zinc-900 rounded-2xl p-5 shadow-lg hover:bg-zinc-800 transition duration-300 flex justify-between items-center">
+
+      <div className="flex-1">
+        <h2 className="text-2xl font-bold text-white">
           {name}
         </h2>
 
-        <p className="text-gray-400 mt-1">
+        <p className="text-gray-400 mt-2">
           {description}
         </p>
 
-        <p className="text-yellow-400 font-semibold mt-2">
+        <p className="text-yellow-400 text-xl font-bold mt-3">
           ₹{price}
         </p>
       </div>
 
-      <button className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-xl text-white font-semibold">
+      <button className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl transition">
         Add
       </button>
+
     </div>
   );
 }
