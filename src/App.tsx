@@ -1,9 +1,22 @@
+import Logo from "./components/layout/Logo";
+import RestaurantHeader from "./components/layout/RestaurantHeader";
+import HeroSection from "./components/layout/HeroSection";
+
 function App() {
   return (
-    <div>
-      <h1>🍽️ REDDY'S KITCHEN</h1>
-      <h2>Pure Veg Restaurant</h2>
-      <p>Order delicious food with a single scan.</p>
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6">
+
+      <div className="pt-10">
+        <Logo />
+      </div>
+
+      <RestaurantHeader
+        name="REDDY'S KITCHEN"
+        tagline="🌱 Pure Veg Restaurant"
+      />
+
+      <HeroSection />
+
     </div>
   );
 }
