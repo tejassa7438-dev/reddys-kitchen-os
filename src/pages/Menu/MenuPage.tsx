@@ -1,19 +1,17 @@
 import { useState } from "react";
 import FoodCard from "../../components/menu/FoodCard";
+import CartSummary from "../../components/cart/CartSummary";
 import { menuItems } from "../../constants/menu";
 
 function MenuPage() {
-  // Get unique categories
   const categories = [
     "All",
     ...new Set(menuItems.map((item) => item.category)),
   ];
 
-  // States
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [search, setSearch] = useState("");
 
-  // Filter menu
   const filteredItems = menuItems.filter((item) => {
     const matchesCategory =
       selectedCategory === "All" ||
@@ -38,7 +36,7 @@ function MenuPage() {
         Choose your favourite dishes
       </p>
 
-      {/* Search */}
+      {/* Search Bar */}
       <input
         type="text"
         placeholder="🔍 Search dishes..."
@@ -47,7 +45,7 @@ function MenuPage() {
         className="w-full mb-6 px-5 py-3 rounded-xl bg-zinc-900 border border-zinc-700 text-white placeholder-gray-500 focus:outline-none focus:border-red-600"
       />
 
-      {/* Categories */}
+      {/* Category Buttons */}
       <div className="flex gap-3 overflow-x-auto mb-8 pb-2">
         {categories.map((category) => (
           <button
@@ -64,8 +62,8 @@ function MenuPage() {
         ))}
       </div>
 
-      {/* Menu Items */}
-      <div className="grid gap-5">
+      {/* Food Cards */}
+      <div className="grid gap-5 pb-28">
         {filteredItems.length > 0 ? (
           filteredItems.map((item) => (
             <FoodCard
@@ -88,6 +86,9 @@ function MenuPage() {
           </div>
         )}
       </div>
+
+      {/* Floating Cart */}
+      <CartSummary />
 
     </div>
   );
