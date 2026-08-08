@@ -2,12 +2,12 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: "AIzaSyD-KcHxIkeI7sKvimKLtsFaB7oDfk4Vwpk",
+  authDomain: "reddys-kitchen-os.firebaseapp.com",
+  projectId: "reddys-kitchen-os",
+  storageBucket: "reddys-kitchen-os.firebasestorage.app",
+  messagingSenderId: "809709203681",
+  appId: "1:809709203681:web:77343d6014053f013a87a0",
 };
 
 const app = initializeApp(firebaseConfig);
