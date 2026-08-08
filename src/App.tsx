@@ -4,22 +4,22 @@ import WelcomePage from "./pages/Home/WelcomePage";
 import MenuPage from "./pages/Menu/MenuPage";
 import CartPage from "./pages/Cart/CartPage";
 import CheckoutPage from "./pages/checkout/CheckoutPage";
+import OrderSuccessPage from "./pages/OrderSuccess/OrderSuccessPage";
+import KitchenPage from "./pages/Kitchen/KitchenPage";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Welcome */}
+        {/* Customer App */}
         <Route path="/" element={<WelcomePage />} />
-
-        {/* Menu */}
         <Route path="/menu" element={<MenuPage />} />
-
-        {/* Cart */}
         <Route path="/cart" element={<CartPage />} />
-
-        {/* Checkout */}
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/success" element={<OrderSuccessPage />} />
+
+        {/* Kitchen Dashboard */}
+        <Route path="/kitchen" element={<KitchenPage />} />
       </Routes>
     </BrowserRouter>
   );

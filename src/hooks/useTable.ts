@@ -1,11 +1,19 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTableStore } from "../store/tableStore";
 
-function useTable() {
-  const [searchParams] = useSearchParams();
+export function useTable() {
+  const [params] = useSearchParams();
 
-  const table = searchParams.get("table");
+  const { table, setTable } = useTableStore();
 
-  return table ?? "Unknown";
+  useEffect(() => {
+    const tableNumber = Number(params.get("table"));
+
+    if (!isNaN(tableNumber) && tableNumber > 0) {
+      setTable(tableNumber);
+    }
+  }, [params, setTable]);
+
+  return table;
 }
-
-export default useTable;
