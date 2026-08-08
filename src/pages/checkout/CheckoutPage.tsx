@@ -46,14 +46,23 @@ function CheckoutPage() {
     };
 
     try {
+      console.log("Placing Order...", order);
+
       await orderService.placeOrder(order);
+
+      console.log("Order placed successfully!");
 
       clearCart();
 
       navigate("/success");
     } catch (error) {
-      console.error(error);
-      alert("Failed to place order.");
+      console.error("Firebase Error:", error);
+
+      if (error instanceof Error) {
+        alert(error.message);
+      } else {
+        alert("Unknown error while placing order.");
+      }
     }
   };
 
@@ -109,36 +118,45 @@ function CheckoutPage() {
           Order Summary
         </h2>
 
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="flex justify-between py-2"
-          >
-            <span>
-              {item.name} × {item.quantity}
-            </span>
+        {items.length === 0 ? (
+          <p className="text-gray-400">
+            Your cart is empty.
+          </p>
+        ) : (
+          <>
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex justify-between py-2"
+              >
+                <span>
+                  {item.name} × {item.quantity}
+                </span>
 
-            <span>
-              ₹{item.price * item.quantity}
-            </span>
-          </div>
-        ))}
+                <span>
+                  ₹{item.price * item.quantity}
+                </span>
+              </div>
+            ))}
 
-        <div className="border-t border-zinc-700 mt-6 pt-6 flex justify-between text-2xl font-bold">
+            <div className="border-t border-zinc-700 mt-6 pt-6 flex justify-between text-2xl font-bold">
 
-          <span>Total</span>
+              <span>Total</span>
 
-          <span className="text-yellow-400">
-            ₹{total}
-          </span>
+              <span className="text-yellow-400">
+                ₹{total}
+              </span>
 
-        </div>
+            </div>
+          </>
+        )}
 
       </div>
 
       <button
         onClick={placeOrder}
-        className="w-full mt-8 bg-green-600 hover:bg-green-700 py-4 rounded-xl text-xl font-bold transition"
+        disabled={items.length === 0}
+        className="w-full mt-8 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-4 rounded-xl text-xl font-bold transition"
       >
         Place Order
       </button>
