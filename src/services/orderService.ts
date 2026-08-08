@@ -13,11 +13,18 @@ const ordersCollection = collection(db, "orders");
 
 export const orderService = {
   async placeOrder(order: Order): Promise<void> {
-    await addDoc(ordersCollection, order);
+    console.log("Writing to Firestore...");
+
+    const docRef = await addDoc(ordersCollection, order);
+
+    console.log("Firestore write successful:", docRef.id);
   },
 
   async getOrders(): Promise<Order[]> {
-    const q = query(ordersCollection, orderBy("createdAt", "desc"));
+    const q = query(
+      ordersCollection,
+      orderBy("createdAt", "desc")
+    );
 
     const snapshot = await getDocs(q);
 
