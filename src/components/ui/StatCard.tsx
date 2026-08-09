@@ -16,28 +16,20 @@ export default function StatCard({
   return (
     <motion.div
       whileHover={{ scale: 1.04 }}
-      className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800"
+      className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 flex justify-between items-center"
     >
-      <div className="flex justify-between items-center">
+      <div>
+        <p className="text-gray-400">{title}</p>
 
-        <div>
+        <h1 className="text-4xl font-bold mt-3">
+          {value}
+        </h1>
+      </div>
 
-          <p className="text-gray-400">
-            {title}
-          </p>
-
-          <h1 className="text-4xl font-bold mt-3">
-            {value}
-          </h1>
-
-        </div>
-
-        <div
-          className={`${color} w-14 h-14 rounded-xl flex items-center justify-center`}
-        >
-          {icon}
-        </div>
-
+      <div
+        className={`${color} w-14 h-14 rounded-xl flex items-center justify-center`}
+      >
+        {icon}
       </div>
     </motion.div>
   );
