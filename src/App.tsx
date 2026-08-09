@@ -6,7 +6,7 @@ import CartPage from "./pages/Cart/CartPage";
 import CheckoutPage from "./pages/checkout/CheckoutPage";
 import OrderSuccessPage from "./pages/OrderSuccess/OrderSuccessPage";
 import KitchenPage from "./pages/Kitchen/KitchenPage";
-
+import TrackOrderPage from "./pages/TrackOrder/TrackOrderPage";
 function App() {
   return (
     <BrowserRouter>
@@ -17,6 +17,7 @@ function App() {
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/success" element={<OrderSuccessPage />} />
+        <Route path="/track/:orderId" element={<TrackOrderPage />} />
 
         {/* Kitchen Dashboard */}
         <Route path="/kitchen" element={<KitchenPage />} />

@@ -48,11 +48,11 @@ function CheckoutPage() {
     try {
       console.log("Placing Order...", order);
 
-      await orderService.placeOrder(order);
+      const orderId = await orderService.placeOrder(order);
 
-      console.log("Order placed successfully!");
+clearCart();
 
-      clearCart();
+navigate(`/track/${orderId}`);
 
       navigate("/success");
     } catch (error) {
