@@ -6,21 +6,28 @@ import {
   orderBy,
   doc,
   onSnapshot,
+  updateDoc,
+  deleteDoc,
 } from "firebase/firestore";
 
 import { db } from "./firebase";
-import type { Order } from "../types/order";
+
+import type { Order, OrderStatus } from "../types/order";
 
 const ordersCollection = collection(db, "orders");
 
 export const orderService = {
-  // Place a new order
+  // -----------------------------
+  // Place New Order
+  // -----------------------------
   async placeOrder(order: Order): Promise<string> {
     const docRef = await addDoc(ordersCollection, order);
     return docRef.id;
   },
 
-  // Get all orders once
+  // -----------------------------
+  // Get All Orders (One Time)
+  // -----------------------------
   async getOrders(): Promise<Order[]> {
     const q = query(
       ordersCollection,
@@ -35,7 +42,9 @@ export const orderService = {
     }));
   },
 
-  // Live updates for all orders (Admin / Kitchen)
+  // -----------------------------
+  // Live Orders (Admin/Kitchen)
+  // -----------------------------
   subscribeToOrders(
     callback: (orders: Order[]) => void
   ) {
@@ -45,16 +54,18 @@ export const orderService = {
     );
 
     return onSnapshot(q, (snapshot) => {
-      callback(
-        snapshot.docs.map((doc) => ({
-          ...(doc.data() as Order),
-          id: doc.id,
-        }))
-      );
+      const orders = snapshot.docs.map((doc) => ({
+        ...(doc.data() as Order),
+        id: doc.id,
+      }));
+
+      callback(orders);
     });
   },
 
-  // Live updates for a single order (Customer Tracking)
+  // -----------------------------
+  // Live Single Order (Tracking)
+  // -----------------------------
   subscribeToOrder(
     orderId: string,
     callback: (order: Order | null) => void
@@ -73,5 +84,26 @@ export const orderService = {
         });
       }
     );
+  },
+
+  // -----------------------------
+  // Update Order Status
+  // -----------------------------
+  async updateOrderStatus(
+    orderId: string,
+    status: OrderStatus
+  ): Promise<void> {
+    const orderRef = doc(db, "orders", orderId);
+
+    await updateDoc(orderRef, {
+      status,
+    });
+  },
+
+  // -----------------------------
+  // Delete Order (Optional)
+  // -----------------------------
+  async deleteOrder(orderId: string): Promise<void> {
+    await deleteDoc(doc(db, "orders", orderId));
   },
 };

@@ -8,6 +8,9 @@ import OrderSuccessPage from "./pages/OrderSuccess/OrderSuccessPage";
 import KitchenPage from "./pages/Kitchen/KitchenPage";
 import TrackOrderPage from "./pages/TrackOrder/TrackOrderPage";
 import MenuManagement from "./pages/Admin/MenuManagement";
+import AdminDashboard from "./pages/Admin/AdminDashboard";
+import OrdersManagement from "./pages/Admin/OrdersManagement";
+
 function App() {
   return (
     <BrowserRouter>
@@ -20,6 +23,9 @@ function App() {
         <Route path="/success" element={<OrderSuccessPage />} />
         <Route path="/track/:orderId" element={<TrackOrderPage />} />
         <Route path="/admin/menu" element={<MenuManagement />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/orders"element={<OrdersManagement />}
+/>
 
         {/* Kitchen Dashboard */}
         <Route path="/kitchen" element={<KitchenPage />} />

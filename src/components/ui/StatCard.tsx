@@ -16,7 +16,7 @@ export default function StatCard({
   return (
     <motion.div
       whileHover={{ scale: 1.04 }}
-      className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 flex justify-between items-center"
+      className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 flex justify-between items-center min-h-[120px]"
     >
       <div>
         <p className="text-gray-400">{title}</p>
