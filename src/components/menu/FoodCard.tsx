@@ -1,12 +1,11 @@
 import { useCartStore } from "../../store/cartStore";
 
 type FoodCardProps = {
-  id: number;
+  id: string;
   name: string;
   description: string;
   price: number;
 };
-
 function FoodCard({
   id,
   name,

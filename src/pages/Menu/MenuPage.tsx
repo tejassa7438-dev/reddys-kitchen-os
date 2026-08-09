@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import FoodCard from "../../components/menu/FoodCard";
 import SearchBar from "../../components/menu/SearchBar";
@@ -6,23 +6,58 @@ import CategoryTabs from "../../components/menu/CategoryTabs";
 import PopularBanner from "../../components/menu/PopularBanner";
 import CartSummary from "../../components/cart/CartSummary";
 
-import { menuItems } from "../../constants/menu";
+import { menuService } from "../../services/menuService";
+import type { MenuItem } from "../../types/menu";
 
 function MenuPage() {
+  const [items, setItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  const filteredItems = menuItems.filter((item) => {
-    const matchesSearch = item.name
-      .toLowerCase()
-      .includes(search.toLowerCase());
+  useEffect(() => {
+    const unsubscribe = menuService.subscribe((data) => {
+      setItems(data);
+      setLoading(false);
+    });
 
-    const matchesCategory =
-      selectedCategory === "All" ||
-      item.category === selectedCategory;
+    return unsubscribe;
+  }, []);
 
-    return matchesSearch && matchesCategory;
-  });
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesSearch = item.name
+        .toLowerCase()
+        .includes(search.toLowerCase());
+
+      const matchesCategory =
+        selectedCategory === "All" ||
+        item.category === selectedCategory;
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        item.available
+      );
+    });
+  }, [items, search, selectedCategory]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-red-500">
+            Loading Menu...
+          </h2>
+
+          <p className="text-gray-400 mt-3">
+            Please wait...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -66,7 +101,7 @@ function MenuPage() {
           />
         </div>
 
-        {/* Menu Items */}
+        {/* Menu */}
         <div className="mt-8 grid gap-5 pb-32">
 
           {filteredItems.length > 0 ? (
