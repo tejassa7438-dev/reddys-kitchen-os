@@ -11,13 +11,20 @@ function CheckoutPage() {
   const { items, clearCart } = useCartStore();
   const { table } = useTableStore();
 
-  const [customerName, setCustomerName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [instructions, setInstructions] = useState("");
+  const [customerName, setCustomerName] =
+    useState("");
+
+  const [phone, setPhone] =
+    useState("");
+
+  const [instructions, setInstructions] =
+    useState("");
 
   const total = useMemo(() => {
     return items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
+      (sum, item) =>
+        sum +
+        item.price * item.quantity,
       0
     );
   }, [items]);
@@ -33,153 +40,231 @@ function CheckoutPage() {
       return;
     }
 
-    const createdAt = new Date().toISOString();
+    const createdAt =
+      new Date().toISOString();
 
-const order = {
-  id: Date.now().toString(),
-  table,
-  customerName,
-  phone,
-  instructions,
-  items,
-  total,
-  status: "Pending" as const,
-  createdAt,
-
-  batches: [
-    {
+    const order = {
       id: Date.now().toString(),
+
+      table,
+
+      customerName:
+        customerName.trim(),
+
+      phone: phone.trim(),
+
+      instructions:
+        instructions.trim(),
+
       items,
+
+      total,
+
       status: "Pending" as const,
+
       createdAt,
-    },
-  ],
-};
+
+      batches: [
+        {
+          id: Date.now().toString(),
+
+          items,
+
+          status: "Pending" as const,
+
+          createdAt,
+        },
+      ],
+    };
 
     try {
-      const orderId = await orderService.placeOrder(order);
-      localStorage.setItem( `activeOrderId_table_${table}`,orderId
-);
+      const orderId =
+        await orderService.placeOrder(
+          order
+        );
+
+      // Table-specific active order
+      localStorage.setItem(
+        `activeOrderId_table_${table}`,
+        orderId
+      );
+
+      // Generic active order
+      // used by the Success page
+      localStorage.setItem(
+        "activeOrderId",
+        orderId
+      );
 
       clearCart();
-      
+
       navigate("/success");
 
-      // Go directly to live tracking
-      navigate(`/track/${orderId}`, {
-        replace: true,
-      });
     } catch (error) {
-      console.error("Firebase Error:", error);
+      console.error(
+        "Firebase Error:",
+        error
+      );
 
-      if (error instanceof Error) {
+      if (
+        error instanceof Error
+      ) {
         alert(error.message);
       } else {
-        alert("Unknown error while placing order.");
+        alert(
+          "Unknown error while placing order."
+        );
       }
     }
   };
 
   return (
-    <div className="min-h-screen bg-black text-white px-5 py-10 max-w-3xl mx-auto">
+    <div className="min-h-screen bg-black text-white px-5 py-8">
 
-      <button
-        onClick={() => navigate("/cart")}
-        className="text-red-500 hover:text-red-400 mb-6"
-      >
-        ← Back to Cart
-      </button>
+      <div className="max-w-3xl mx-auto">
 
-      <h1 className="text-4xl font-bold text-red-600">
-        Checkout
-      </h1>
+        {/* ================================= */}
+        {/* BACK */}
+        {/* ================================= */}
 
-      <p className="mt-2 text-gray-400">
-        Table {table}
-      </p>
-
-      <div className="mt-8 space-y-5">
-
-        <input
-          type="text"
-          placeholder="Customer Name"
-          value={customerName}
-          onChange={(e) =>
-            setCustomerName(e.target.value)
+        <button
+          onClick={() =>
+            navigate("/cart")
           }
-          className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
-        />
+          className="text-red-500 hover:text-red-400 mb-6"
+        >
+          ← Back to Cart
+        </button>
 
-        <input
-          type="tel"
-          placeholder="Phone Number (Optional)"
-          value={phone}
-          onChange={(e) =>
-            setPhone(e.target.value)
-          }
-          className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
-        />
+        {/* ================================= */}
+        {/* HEADER */}
+        {/* ================================= */}
 
-        <textarea
-          rows={4}
-          placeholder="Special Instructions (Optional)"
-          value={instructions}
-          onChange={(e) =>
-            setInstructions(e.target.value)
-          }
-          className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
-        />
+        <h1 className="text-4xl font-bold text-red-600">
+          Checkout
+        </h1>
 
-      </div>
+        <p className="mt-2 text-gray-400">
+          Table {table}
+        </p>
 
-      <div className="mt-10 bg-zinc-900 rounded-2xl p-6">
+        {/* ================================= */}
+        {/* CUSTOMER DETAILS */}
+        {/* ================================= */}
 
-        <h2 className="text-2xl font-bold mb-5">
-          Order Summary
-        </h2>
+        <div className="mt-8 space-y-5">
 
-        {items.length === 0 ? (
-          <p className="text-gray-400">
-            Your cart is empty.
-          </p>
-        ) : (
-          <>
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="flex justify-between py-2"
-              >
+          <input
+            type="text"
+            placeholder="Customer Name"
+            value={customerName}
+            onChange={(e) =>
+              setCustomerName(
+                e.target.value
+              )
+            }
+            className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
+          />
+
+          <input
+            type="tel"
+            placeholder="Phone Number (Optional)"
+            value={phone}
+            onChange={(e) =>
+              setPhone(
+                e.target.value
+              )
+            }
+            className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
+          />
+
+          <textarea
+            rows={4}
+            placeholder="Special Instructions (Optional)"
+            value={instructions}
+            onChange={(e) =>
+              setInstructions(
+                e.target.value
+              )
+            }
+            className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
+          />
+
+        </div>
+
+        {/* ================================= */}
+        {/* ORDER SUMMARY */}
+        {/* ================================= */}
+
+        <div className="mt-10 bg-zinc-900 rounded-2xl p-6">
+
+          <h2 className="text-2xl font-bold mb-5">
+            Order Summary
+          </h2>
+
+          {items.length === 0 ? (
+
+            <p className="text-gray-400">
+              Your cart is empty.
+            </p>
+
+          ) : (
+
+            <>
+              {items.map((item) => (
+
+                <div
+                  key={item.id}
+                  className="flex justify-between py-2"
+                >
+
+                  <span>
+                    {item.name} ×{" "}
+                    {item.quantity}
+                  </span>
+
+                  <span>
+                    ₹
+                    {item.price *
+                      item.quantity}
+                  </span>
+
+                </div>
+
+              ))}
+
+              <div className="border-t border-zinc-700 mt-6 pt-6 flex justify-between text-2xl font-bold">
+
                 <span>
-                  {item.name} × {item.quantity}
+                  Total
                 </span>
 
-                <span>
-                  ₹{item.price * item.quantity}
+                <span className="text-yellow-400">
+                  ₹{total}
                 </span>
+
               </div>
-            ))}
+            </>
 
-            <div className="border-t border-zinc-700 mt-6 pt-6 flex justify-between text-2xl font-bold">
+          )}
 
-              <span>Total</span>
+        </div>
 
-              <span className="text-yellow-400">
-                ₹{total}
-              </span>
+        {/* ================================= */}
+        {/* PLACE ORDER */}
+        {/* ================================= */}
 
-            </div>
-          </>
-        )}
+        <button
+          onClick={placeOrder}
+          disabled={
+            items.length === 0
+          }
+          className="w-full mt-8 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-4 rounded-xl text-xl font-bold transition"
+        >
+          Place Order
+        </button>
 
       </div>
-
-      <button
-        onClick={placeOrder}
-        disabled={items.length === 0}
-        className="w-full mt-8 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-4 rounded-xl text-xl font-bold transition"
-      >
-        Place Order
-      </button>
 
     </div>
   );

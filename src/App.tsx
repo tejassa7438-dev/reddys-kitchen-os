@@ -6,6 +6,7 @@ import CartPage from "./pages/Cart/CartPage";
 import CheckoutPage from "./pages/checkout/CheckoutPage";
 import KitchenPage from "./pages/Kitchen/KitchenPage";
 import TrackOrderPage from "./pages/TrackOrder/TrackOrderPage";
+import OrderSuccessPage from "./pages/OrderSuccess/OrderSuccessPage";
 
 import AdminDashboard from "./pages/Admin/AdminDashboard";
 import MenuManagement from "./pages/Admin/MenuManagement";
@@ -38,6 +39,10 @@ function App() {
           path="/checkout"
           element={<CheckoutPage />}
         />
+        <Route
+          path="/success"
+  element={<OrderSuccessPage />}
+/>
 
         <Route
           path="/track/:orderId"

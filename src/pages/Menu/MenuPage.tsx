@@ -7,7 +7,6 @@ import {
 import FoodCard from "../../components/menu/FoodCard";
 import SearchBar from "../../components/menu/SearchBar";
 import CategoryTabs from "../../components/menu/CategoryTabs";
-import PopularBanner from "../../components/menu/PopularBanner";
 import CartSummary from "../../components/cart/CartSummary";
 
 import { menuService } from "../../services/menuService";
@@ -203,9 +202,7 @@ function MenuPage() {
 
       <div className="max-w-6xl mx-auto px-5 py-6">
 
-        {/* Today's Special */}
 
-        <PopularBanner />
 
         {/* Search */}
 
