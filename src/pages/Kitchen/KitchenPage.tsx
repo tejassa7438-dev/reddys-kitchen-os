@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import {
   collection,
   onSnapshot,
@@ -19,8 +24,62 @@ function KitchenPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // -----------------------------------------
+  // Previous Firestore snapshot
+  // -----------------------------------------
+
+  const previousOrdersRef =
+    useRef<Order[] | null>(null);
+
+  // -----------------------------------------
+  // Notification audio
+  // -----------------------------------------
+
+  const notificationAudioRef =
+    useRef<HTMLAudioElement | null>(null);
+
+  const playOrderSound = () => {
+    if (!notificationAudioRef.current) {
+      notificationAudioRef.current = new Audio(
+        "/sounds/order-received.mp3"
+      );
+
+      notificationAudioRef.current.loop = true;
+      notificationAudioRef.current.volume = 1;
+    }
+
+    const audio =
+      notificationAudioRef.current;
+
+    if (audio.paused) {
+      audio.currentTime = 0;
+
+      audio.play().catch((error) => {
+        console.log(
+          "Kitchen order sound could not play:",
+          error
+        );
+      });
+    }
+  };
+
+  const stopOrderSound = () => {
+    if (!notificationAudioRef.current) {
+      return;
+    }
+
+    notificationAudioRef.current.pause();
+    notificationAudioRef.current.currentTime = 0;
+  };
+
+  // -----------------------------------------
+  // Firestore Orders
+  // -----------------------------------------
+
   useEffect(() => {
-    console.log("Kitchen page connected to Firestore");
+    console.log(
+      "Kitchen page connected to Firestore"
+    );
 
     const q = query(
       collection(db, "orders"),
@@ -30,74 +89,223 @@ function KitchenPage() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        console.log("Orders found:", snapshot.size);
+        console.log(
+          "Orders found:",
+          snapshot.size
+        );
 
-        const data: Order[] = snapshot.docs.map((doc) => ({
-          ...(doc.data() as Order),
-          id: doc.id,
-        }));
+        const data: Order[] =
+          snapshot.docs.map((doc) => ({
+            ...(doc.data() as Order),
+            id: doc.id,
+          }));
 
-        console.log("Orders:", data);
+        const previousOrders =
+          previousOrdersRef.current;
+
+        // -------------------------------------
+        // Initial page load
+        // Do NOT play sound
+        // -------------------------------------
+
+        if (previousOrders === null) {
+          previousOrdersRef.current = data;
+
+          setOrders(data);
+          setLoading(false);
+
+          return;
+        }
+
+        // -------------------------------------
+        // Detect genuinely new order
+        // -------------------------------------
+
+        const newOrderDetected =
+          data.some((newOrder) => {
+            return !previousOrders.some(
+              (oldOrder) =>
+                oldOrder.id === newOrder.id
+            );
+          });
+
+        // -------------------------------------
+        // Detect genuinely new batch
+        // -------------------------------------
+
+        const newBatchDetected =
+          data.some((newOrder) => {
+            const oldOrder =
+              previousOrders.find(
+                (oldOrder) =>
+                  oldOrder.id ===
+                  newOrder.id
+              );
+
+            if (!oldOrder) {
+              return false;
+            }
+
+            const oldBatchIds = new Set(
+              (oldOrder.batches ?? []).map(
+                (batch) => batch.id
+              )
+            );
+
+            return (
+              newOrder.batches?.some(
+                (batch) =>
+                  !oldBatchIds.has(batch.id)
+              ) ?? false
+            );
+          });
+
+        // -------------------------------------
+        // Check for pending work
+        // -------------------------------------
+
+        const hasPendingBatch =
+          data.some((order) => {
+            if (
+              order.batches &&
+              order.batches.length > 0
+            ) {
+              return order.batches.some(
+                (batch) =>
+                  batch.status === "Pending"
+              );
+            }
+
+            return (
+              order.status === "Pending"
+            );
+          });
+
+        // -------------------------------------
+        // New order / new batch
+        // -------------------------------------
+
+        if (
+          newOrderDetected ||
+          newBatchDetected
+        ) {
+          playOrderSound();
+        }
+
+        // -------------------------------------
+        // Stop ONLY when there are no
+        // pending batches remaining
+        // -------------------------------------
+
+        if (!hasPendingBatch) {
+          stopOrderSound();
+        }
+
+        // -------------------------------------
+        // Save current snapshot
+        // -------------------------------------
+
+        previousOrdersRef.current = data;
+
+        console.log(
+          "Orders:",
+          data
+        );
 
         setOrders(data);
         setLoading(false);
       },
       (error) => {
-        console.error("Firestore Error:", error);
+        console.error(
+          "Firestore Error:",
+          error
+        );
+
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      stopOrderSound();
+    };
   }, []);
 
   // -----------------------------------------
   // Update Batch Status
   // -----------------------------------------
-  const handleBatchStatusChange = async (
-    orderId: string,
-    batchId: string,
-    status: OrderStatus
-  ) => {
-    try {
-      await kitchenService.updateBatchStatus(
-        orderId,
-        batchId,
-        status
-      );
-    } catch (error) {
-      console.error(error);
-      alert("Failed to update order batch.");
-    }
-  };
+
+  const handleBatchStatusChange =
+    async (
+      orderId: string,
+      batchId: string,
+      status: OrderStatus
+    ) => {
+      try {
+        await kitchenService.updateBatchStatus(
+          orderId,
+          batchId,
+          status
+        );
+
+        // IMPORTANT:
+        //
+        // Do NOT stop the sound here.
+        //
+        // Firestore will send the updated
+        // snapshot. If another Pending batch
+        // exists, the sound stays active.
+        //
+        // If there are no Pending batches,
+        // the snapshot logic above stops it.
+      } catch (error) {
+        console.error(error);
+
+        alert(
+          "Failed to update order batch."
+        );
+      }
+    };
 
   // -----------------------------------------
-  // Update Legacy Order Status
+  // Legacy Order Status
   // -----------------------------------------
-  const handleLegacyStatusChange = async (
-    orderId: string,
-    status: OrderStatus
-  ) => {
-    try {
-      await kitchenService.updateStatus(
-        orderId,
-        status
-      );
-    } catch (error) {
-      console.error(error);
-      alert("Failed to update order.");
-    }
-  };
+
+  const handleLegacyStatusChange =
+    async (
+      orderId: string,
+      status: OrderStatus
+    ) => {
+      try {
+        await kitchenService.updateStatus(
+          orderId,
+          status
+        );
+
+        // Do not manually stop sound here.
+        // Firestore snapshot decides whether
+        // pending work still exists.
+      } catch (error) {
+        console.error(error);
+
+        alert(
+          "Failed to update order."
+        );
+      }
+    };
 
   // -----------------------------------------
   // Loading
   // -----------------------------------------
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
+
         <p className="text-xl text-gray-400">
           Loading Kitchen...
         </p>
+
       </div>
     );
   }
@@ -105,6 +313,7 @@ function KitchenPage() {
   // -----------------------------------------
   // Kitchen Dashboard
   // -----------------------------------------
+
   return (
     <div className="min-h-screen bg-black text-white p-6">
 
@@ -113,6 +322,7 @@ function KitchenPage() {
       </h1>
 
       {orders.length === 0 ? (
+
         <div className="text-center mt-20">
 
           <h2 className="text-3xl text-gray-400">
@@ -124,27 +334,24 @@ function KitchenPage() {
           </p>
 
         </div>
+
       ) : (
+
         <div className="space-y-6">
 
           {orders.map((order) => {
 
-            /*
-             * New orders have batches.
-             *
-             * Older orders created before the batch
-             * system may not have batches, so we create
-             * a temporary legacy batch for display.
-             */
             const batches: OrderBatch[] =
-              order.batches && order.batches.length > 0
+              order.batches &&
+              order.batches.length > 0
                 ? order.batches
                 : [
                     {
                       id: "legacy",
                       items: order.items,
                       status: order.status,
-                      createdAt: order.createdAt,
+                      createdAt:
+                        order.createdAt,
                     },
                   ];
 
@@ -167,7 +374,8 @@ function KitchenPage() {
                     </h2>
 
                     <p className="text-sm text-gray-500 mt-1">
-                      Order #{order.id.slice(0, 8)}
+                      Order #
+                      {order.id.slice(0, 8)}
                     </p>
 
                   </div>
@@ -186,25 +394,31 @@ function KitchenPage() {
                 </div>
 
                 {/* -------------------------------- */}
-                {/* Customer Information */}
+                {/* Customer */}
                 {/* -------------------------------- */}
 
                 <div className="mt-5 space-y-2">
 
                   <p>
-                    <strong>Customer:</strong>{" "}
+                    <strong>
+                      Customer:
+                    </strong>{" "}
                     {order.customerName}
                   </p>
 
                   {order.phone && (
                     <p>
-                      <strong>Phone:</strong>{" "}
+                      <strong>
+                        Phone:
+                      </strong>{" "}
                       {order.phone}
                     </p>
                   )}
 
                   <p>
-                    <strong>Order Time:</strong>{" "}
+                    <strong>
+                      Order Time:
+                    </strong>{" "}
                     {new Date(
                       order.createdAt
                     ).toLocaleString()}
@@ -250,8 +464,6 @@ function KitchenPage() {
 
                           </div>
 
-                          {/* Batch Status */}
-
                           <span
                             className={`px-4 py-2 rounded-full font-semibold ${
                               batch.status ===
@@ -271,7 +483,9 @@ function KitchenPage() {
 
                         </div>
 
+                        {/* -------------------------------- */}
                         {/* Batch Items */}
+                        {/* -------------------------------- */}
 
                         <div className="mt-5 space-y-2">
 
@@ -301,97 +515,86 @@ function KitchenPage() {
 
                         </div>
 
-                        {/* Batch Actions */}
+                        {/* -------------------------------- */}
+                        {/* Batch Buttons */}
+                        {/* -------------------------------- */}
 
                         <div className="flex justify-end mt-5">
 
-                          {/* Pending */}
-
                           {batch.status ===
                             "Pending" && (
+
                             <button
                               onClick={() => {
+
                                 if (
                                   batch.id ===
                                   "legacy"
                                 ) {
+
                                   handleLegacyStatusChange(
                                     order.id,
                                     "Preparing"
                                   );
+
                                 } else {
+
                                   handleBatchStatusChange(
                                     order.id,
                                     batch.id,
                                     "Preparing"
                                   );
+
                                 }
+
                               }}
                               className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-semibold transition"
                             >
                               Accept
                             </button>
-                          )}
 
-                          {/* Preparing */}
+                          )}
 
                           {batch.status ===
                             "Preparing" && (
+
                             <button
-                              onClick={() => {
-                                if (
-                                  batch.id ===
-                                  "legacy"
-                                ) {
-                                  handleLegacyStatusChange(
-                                    order.id,
-                                    "Ready"
-                                  );
-                                } else {
-                                  handleBatchStatusChange(
-                                    order.id,
-                                    batch.id,
-                                    "Ready"
-                                  );
-                                }
-                              }}
+                              onClick={() =>
+                                handleBatchStatusChange(
+                                  order.id,
+                                  batch.id,
+                                  "Ready"
+                                )
+                              }
                               className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-semibold transition"
                             >
                               Ready
                             </button>
-                          )}
 
-                          {/* Ready */}
+                          )}
 
                           {batch.status ===
                             "Ready" && (
+
                             <button
-                              onClick={() => {
-                                if (
-                                  batch.id ===
-                                  "legacy"
-                                ) {
-                                  handleLegacyStatusChange(
-                                    order.id,
-                                    "Completed"
-                                  );
-                                } else {
-                                  handleBatchStatusChange(
-                                    order.id,
-                                    batch.id,
-                                    "Completed"
-                                  );
-                                }
-                              }}
+                              onClick={() =>
+                                handleBatchStatusChange(
+                                  order.id,
+                                  batch.id,
+                                  "Completed"
+                                )
+                              }
                               className="bg-gray-700 hover:bg-gray-800 px-5 py-2 rounded-lg font-semibold transition"
                             >
                               Complete
                             </button>
+
                           )}
 
                         </div>
 
                       </div>
+
                     )
                   )}
 
@@ -402,6 +605,7 @@ function KitchenPage() {
                 {/* -------------------------------- */}
 
                 {order.instructions && (
+
                   <div className="mt-6 bg-zinc-800 rounded-xl p-4">
 
                     <p className="font-bold">
@@ -413,10 +617,11 @@ function KitchenPage() {
                     </p>
 
                   </div>
+
                 )}
 
                 {/* -------------------------------- */}
-                {/* Overall Total */}
+                {/* Total */}
                 {/* -------------------------------- */}
 
                 <div className="border-t border-zinc-700 mt-6 pt-5 flex justify-between items-center">

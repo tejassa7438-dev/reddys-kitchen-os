@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import {
   UtensilsCrossed,
   ClipboardList,
@@ -21,49 +27,218 @@ import type { Order } from "../../types/order";
 function AdminDashboard() {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-
   const [loading, setLoading] = useState(true);
 
+  // -----------------------------------------
+  // Previous Firestore snapshot
+  // -----------------------------------------
+
+  const previousOrdersRef =
+    useRef<Order[] | null>(null);
+
+  // -----------------------------------------
+  // Notification audio
+  // -----------------------------------------
+
+  const notificationAudioRef =
+    useRef<HTMLAudioElement | null>(null);
+
+  const playOrderSound = () => {
+    if (!notificationAudioRef.current) {
+      notificationAudioRef.current = new Audio(
+        "/sounds/order-received.mp3"
+      );
+
+      notificationAudioRef.current.loop = true;
+      notificationAudioRef.current.volume = 1;
+    }
+
+    const audio = notificationAudioRef.current;
+
+    if (audio.paused) {
+      audio.currentTime = 0;
+
+      audio.play().catch((error) => {
+        console.log(
+          "Order notification sound could not play:",
+          error
+        );
+      });
+    }
+  };
+
+  const stopOrderSound = () => {
+    if (!notificationAudioRef.current) {
+      return;
+    }
+
+    notificationAudioRef.current.pause();
+    notificationAudioRef.current.currentTime = 0;
+  };
+
+  // -----------------------------------------
+  // Firestore subscriptions
+  // -----------------------------------------
+
   useEffect(() => {
-    const unsubMenu = menuService.subscribe((items) => {
-      setMenu(items);
-    });
+    const unsubMenu = menuService.subscribe(
+      (items) => {
+        setMenu(items);
+      }
+    );
 
     const unsubOrders =
-      orderService.subscribeToOrders((items) => {
-        setOrders(items);
-        setLoading(false);
-      });
+      orderService.subscribeToOrders(
+        (items) => {
+          const previousOrders =
+            previousOrdersRef.current;
+
+          // -----------------------------------
+          // Initial Firestore snapshot
+          // Do NOT play sound
+          // -----------------------------------
+
+          if (previousOrders === null) {
+            previousOrdersRef.current = items;
+            setOrders(items);
+            setLoading(false);
+            return;
+          }
+
+          // -----------------------------------
+          // Find genuinely new orders
+          // -----------------------------------
+
+          const newOrderDetected =
+            items.some((newOrder) => {
+              return !previousOrders.some(
+                (oldOrder) =>
+                  oldOrder.id === newOrder.id
+              );
+            });
+
+          // -----------------------------------
+          // Find genuinely new batches
+          // -----------------------------------
+
+          const newBatchDetected =
+            items.some((newOrder) => {
+              const oldOrder =
+                previousOrders.find(
+                  (oldOrder) =>
+                    oldOrder.id === newOrder.id
+                );
+
+              // Entire order is new.
+              // Already handled above.
+              if (!oldOrder) {
+                return false;
+              }
+
+              const oldBatchIds = new Set(
+                (oldOrder.batches ?? []).map(
+                  (batch) => batch.id
+                )
+              );
+
+              return (
+                newOrder.batches?.some(
+                  (batch) =>
+                    !oldBatchIds.has(batch.id)
+                ) ?? false
+              );
+            });
+
+          // -----------------------------------
+          // Check whether pending work exists
+          // -----------------------------------
+
+          const hasPendingWork =
+            items.some((order) => {
+              if (
+                order.batches &&
+                order.batches.length > 0
+              ) {
+                return order.batches.some(
+                  (batch) =>
+                    batch.status === "Pending"
+                );
+              }
+
+              return order.status === "Pending";
+            });
+
+          // -----------------------------------
+          // ONLY play for a genuinely new
+          // order or genuinely new batch
+          // -----------------------------------
+
+          if (
+            newOrderDetected ||
+            newBatchDetected
+          ) {
+            playOrderSound();
+          }
+
+          // -----------------------------------
+          // Stop when no pending work remains
+          // -----------------------------------
+
+          if (!hasPendingWork) {
+            stopOrderSound();
+          }
+
+          // -----------------------------------
+          // Save current snapshot
+          // -----------------------------------
+
+          previousOrdersRef.current = items;
+
+          setOrders(items);
+          setLoading(false);
+        }
+      );
 
     return () => {
       unsubMenu();
       unsubOrders();
+      stopOrderSound();
     };
   }, []);
 
+  // -----------------------------------------
+  // Dashboard statistics
+  // -----------------------------------------
+
   const stats = useMemo(() => {
-    const today = new Date().toDateString();
+    const today =
+      new Date().toDateString();
 
     const todayOrders = orders.filter(
-      (o) =>
-        new Date(o.createdAt).toDateString() ===
-        today
+      (order) =>
+        new Date(
+          order.createdAt
+        ).toDateString() === today
     );
 
     const pending = orders.filter(
-      (o) => o.status === "Pending"
+      (order) =>
+        order.status === "Pending"
     ).length;
 
     const preparing = orders.filter(
-      (o) => o.status === "Preparing"
+      (order) =>
+        order.status === "Preparing"
     ).length;
 
     const ready = orders.filter(
-      (o) => o.status === "Ready"
+      (order) =>
+        order.status === "Ready"
     ).length;
 
     const revenue = todayOrders.reduce(
-      (sum, order) => sum + order.total,
+      (sum, order) =>
+        sum + order.total,
       0
     );
 
@@ -78,16 +253,24 @@ function AdminDashboard() {
     };
   }, [menu, orders]);
 
+  // -----------------------------------------
+  // Loading
+  // -----------------------------------------
+
   if (loading) {
-    return (
-      <AdminLayout title="Dashboard">
-        <Loading />
-      </AdminLayout>
-    );
+    return <Loading />;
   }
 
+  // -----------------------------------------
+  // Dashboard
+  // -----------------------------------------
+
   return (
-    <AdminLayout title="Dashboard">
+    <AdminLayout title="Admin Dashboard">
+
+      {/* ----------------------------------- */}
+      {/* Dashboard Stats */}
+      {/* ----------------------------------- */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 
@@ -131,9 +314,14 @@ function AdminDashboard() {
           value={stats.ready}
           color="bg-emerald-600"
           icon={<CheckCircle />}
-        />      </div>
+        />
 
+      </div>
+
+      {/* ----------------------------------- */}
       {/* Quick Actions */}
+      {/* ----------------------------------- */}
+
       <div className="mt-10">
 
         <h2 className="text-2xl font-bold mb-5">
@@ -198,7 +386,9 @@ function AdminDashboard() {
 
       </div>
 
+      {/* ----------------------------------- */}
       {/* Recent Orders */}
+      {/* ----------------------------------- */}
 
       <div className="mt-12">
 
@@ -258,16 +448,15 @@ function AdminDashboard() {
                   <td className="p-4">
 
                     <span
-                      className={`px-3 py-1 rounded-full text-sm font-semibold
-                        ${
-                          order.status === "Pending"
-                            ? "bg-yellow-600"
-                            : order.status === "Preparing"
-                            ? "bg-orange-600"
-                            : order.status === "Ready"
-                            ? "bg-green-600"
-                            : "bg-blue-600"
-                        }`}
+                      className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                        order.status === "Pending"
+                          ? "bg-yellow-600"
+                          : order.status === "Preparing"
+                          ? "bg-orange-600"
+                          : order.status === "Ready"
+                          ? "bg-green-600"
+                          : "bg-blue-600"
+                      }`}
                     >
                       {order.status}
                     </span>
