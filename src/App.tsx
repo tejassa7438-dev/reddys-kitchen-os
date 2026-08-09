@@ -10,6 +10,7 @@ import TrackOrderPage from "./pages/TrackOrder/TrackOrderPage";
 import MenuManagement from "./pages/Admin/MenuManagement";
 import AdminDashboard from "./pages/Admin/AdminDashboard";
 import OrdersManagement from "./pages/Admin/OrdersManagement";
+import Settings from "./pages/Admin/Settings";
 
 function App() {
   return (
@@ -24,8 +25,8 @@ function App() {
         <Route path="/track/:orderId" element={<TrackOrderPage />} />
         <Route path="/admin/menu" element={<MenuManagement />} />
         <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/orders"element={<OrdersManagement />}
-/>
+        <Route path="/admin/orders" element={<OrdersManagement />} />
+        <Route path="/admin/settings" element={<Settings />} />
 
         {/* Kitchen Dashboard */}
         <Route path="/kitchen" element={<KitchenPage />} />
