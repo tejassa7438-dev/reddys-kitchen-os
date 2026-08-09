@@ -8,7 +8,12 @@ import {
 
 import { db } from "../../services/firebase";
 import { kitchenService } from "../../services/kitchenService";
-import type { Order, OrderStatus } from "../../types/order";
+
+import type {
+  Order,
+  OrderBatch,
+  OrderStatus,
+} from "../../types/order";
 
 function KitchenPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -46,28 +51,62 @@ function KitchenPage() {
     return () => unsubscribe();
   }, []);
 
-  const handleStatusChange = async (
+  // -----------------------------------------
+  // Update Batch Status
+  // -----------------------------------------
+  const handleBatchStatusChange = async (
+    orderId: string,
+    batchId: string,
+    status: OrderStatus
+  ) => {
+    try {
+      await kitchenService.updateBatchStatus(
+        orderId,
+        batchId,
+        status
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update order batch.");
+    }
+  };
+
+  // -----------------------------------------
+  // Update Legacy Order Status
+  // -----------------------------------------
+  const handleLegacyStatusChange = async (
     orderId: string,
     status: OrderStatus
   ) => {
     try {
-      await kitchenService.updateStatus(orderId, status);
+      await kitchenService.updateStatus(
+        orderId,
+        status
+      );
     } catch (error) {
       console.error(error);
       alert("Failed to update order.");
     }
   };
 
+  // -----------------------------------------
+  // Loading
+  // -----------------------------------------
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
-        <h1 className="text-3xl font-bold">Loading Kitchen...</h1>
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-xl text-gray-400">
+          Loading Kitchen...
+        </p>
       </div>
     );
   }
 
+  // -----------------------------------------
+  // Kitchen Dashboard
+  // -----------------------------------------
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-6">
+    <div className="min-h-screen bg-black text-white p-6">
 
       <h1 className="text-4xl font-bold text-red-600 mb-8">
         🍳 Kitchen Dashboard
@@ -75,6 +114,7 @@ function KitchenPage() {
 
       {orders.length === 0 ? (
         <div className="text-center mt-20">
+
           <h2 className="text-3xl text-gray-400">
             No Orders Yet
           </h2>
@@ -82,151 +122,318 @@ function KitchenPage() {
           <p className="text-gray-500 mt-3">
             Waiting for customers...
           </p>
+
         </div>
       ) : (
         <div className="space-y-6">
 
-          {orders.map((order) => (
+          {orders.map((order) => {
 
-            <div
-              key={order.id}
-              className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 shadow-lg"
-            >
+            /*
+             * New orders have batches.
+             *
+             * Older orders created before the batch
+             * system may not have batches, so we create
+             * a temporary legacy batch for display.
+             */
+            const batches: OrderBatch[] =
+              order.batches && order.batches.length > 0
+                ? order.batches
+                : [
+                    {
+                      id: "legacy",
+                      items: order.items,
+                      status: order.status,
+                      createdAt: order.createdAt,
+                    },
+                  ];
 
-              <div className="flex justify-between items-center">
+            return (
+              <div
+                key={order.id}
+                className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 shadow-lg"
+              >
 
-                <h2 className="text-2xl font-bold">
-                  🍽 Table {order.table}
-                </h2>
+                {/* -------------------------------- */}
+                {/* Order Header */}
+                {/* -------------------------------- */}
 
-                <div className="flex items-center gap-3">
+                <div className="flex justify-between items-center">
 
-                  <span
-                    className={`px-4 py-2 rounded-full font-semibold ${
-                      order.status === "Pending"
-                        ? "bg-yellow-500 text-black"
-                        : order.status === "Preparing"
-                        ? "bg-blue-600"
-                        : order.status === "Ready"
-                        ? "bg-green-600"
-                        : "bg-gray-700"
-                    }`}
-                  >
-                    {order.status}
-                  </span>
+                  <div>
 
-                  {order.status === "Pending" && (
-                    <button
-                      onClick={() =>
-                        handleStatusChange(order.id, "Preparing")
-                      }
-                      className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
-                    >
-                      Accept
-                    </button>
-                  )}
+                    <h2 className="text-2xl font-bold">
+                      🍽 Table {order.table}
+                    </h2>
 
-                  {order.status === "Preparing" && (
-                    <button
-                      onClick={() =>
-                        handleStatusChange(order.id, "Ready")
-                      }
-                      className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg"
-                    >
-                      Ready
-                    </button>
-                  )}
+                    <p className="text-sm text-gray-500 mt-1">
+                      Order #{order.id.slice(0, 8)}
+                    </p>
 
-                  {order.status === "Ready" && (
-                    <button
-                      onClick={() =>
-                        handleStatusChange(order.id, "Completed")
-                      }
-                      className="bg-gray-700 hover:bg-gray-800 px-4 py-2 rounded-lg"
-                    >
-                      Complete
-                    </button>
-                  )}
-
-                </div>
-
-              </div>
-
-              <div className="mt-5 space-y-2">
-
-                <p>
-                  <strong>Customer:</strong> {order.customerName}
-                </p>
-
-                {order.phone && (
-                  <p>
-                    <strong>Phone:</strong> {order.phone}
-                  </p>
-                )}
-
-                <p>
-                  <strong>Order Time:</strong>{" "}
-                  {new Date(order.createdAt).toLocaleString()}
-                </p>
-
-              </div>
-
-              <div className="border-t border-zinc-700 my-5"></div>
-
-              <h3 className="text-xl font-bold mb-3">
-                Items
-              </h3>
-
-              <div className="space-y-2">
-
-                {order.items.map((item) => (
-
-                  <div
-                    key={item.id}
-                    className="flex justify-between"
-                  >
-                    <span>
-                      {item.name} × {item.quantity}
-                    </span>
-
-                    <span>
-                      ₹{item.price * item.quantity}
-                    </span>
                   </div>
 
-                ))}
+                  <div className="text-right">
 
-              </div>
+                    <p className="text-sm text-gray-400">
+                      {batches.length}{" "}
+                      {batches.length === 1
+                        ? "batch"
+                        : "batches"}
+                    </p>
 
-              {order.instructions && (
-                <div className="mt-5 bg-zinc-800 rounded-xl p-4">
+                  </div>
 
-                  <p className="font-bold">
-                    Special Instructions
+                </div>
+
+                {/* -------------------------------- */}
+                {/* Customer Information */}
+                {/* -------------------------------- */}
+
+                <div className="mt-5 space-y-2">
+
+                  <p>
+                    <strong>Customer:</strong>{" "}
+                    {order.customerName}
                   </p>
 
-                  <p className="mt-2">
-                    {order.instructions}
+                  {order.phone && (
+                    <p>
+                      <strong>Phone:</strong>{" "}
+                      {order.phone}
+                    </p>
+                  )}
+
+                  <p>
+                    <strong>Order Time:</strong>{" "}
+                    {new Date(
+                      order.createdAt
+                    ).toLocaleString()}
                   </p>
 
                 </div>
-              )}
 
-              <div className="border-t border-zinc-700 mt-6 pt-5 flex justify-between items-center">
+                <div className="border-t border-zinc-700 my-6" />
 
-                <span className="text-xl font-bold">
-                  Total
-                </span>
+                {/* -------------------------------- */}
+                {/* Kitchen Batches */}
+                {/* -------------------------------- */}
 
-                <span className="text-2xl font-bold text-yellow-400">
-                  ₹{order.total}
-                </span>
+                <h3 className="text-xl font-bold mb-4">
+                  Kitchen Batches
+                </h3>
+
+                <div className="space-y-4">
+
+                  {batches.map(
+                    (batch, index) => (
+
+                      <div
+                        key={batch.id}
+                        className="bg-zinc-800 rounded-xl p-5 border border-zinc-700"
+                      >
+
+                        {/* Batch Header */}
+
+                        <div className="flex justify-between items-center">
+
+                          <div>
+
+                            <h4 className="text-lg font-bold">
+                              Batch {index + 1}
+                            </h4>
+
+                            <p className="text-sm text-gray-500 mt-1">
+                              {new Date(
+                                batch.createdAt
+                              ).toLocaleString()}
+                            </p>
+
+                          </div>
+
+                          {/* Batch Status */}
+
+                          <span
+                            className={`px-4 py-2 rounded-full font-semibold ${
+                              batch.status ===
+                              "Pending"
+                                ? "bg-yellow-500 text-black"
+                                : batch.status ===
+                                  "Preparing"
+                                ? "bg-blue-600 text-white"
+                                : batch.status ===
+                                  "Ready"
+                                ? "bg-green-600 text-white"
+                                : "bg-gray-700 text-white"
+                            }`}
+                          >
+                            {batch.status}
+                          </span>
+
+                        </div>
+
+                        {/* Batch Items */}
+
+                        <div className="mt-5 space-y-2">
+
+                          {batch.items.map(
+                            (item) => (
+
+                              <div
+                                key={item.id}
+                                className="flex justify-between"
+                              >
+
+                                <span>
+                                  {item.name} ×{" "}
+                                  {item.quantity}
+                                </span>
+
+                                <span>
+                                  ₹
+                                  {item.price *
+                                    item.quantity}
+                                </span>
+
+                              </div>
+
+                            )
+                          )}
+
+                        </div>
+
+                        {/* Batch Actions */}
+
+                        <div className="flex justify-end mt-5">
+
+                          {/* Pending */}
+
+                          {batch.status ===
+                            "Pending" && (
+                            <button
+                              onClick={() => {
+                                if (
+                                  batch.id ===
+                                  "legacy"
+                                ) {
+                                  handleLegacyStatusChange(
+                                    order.id,
+                                    "Preparing"
+                                  );
+                                } else {
+                                  handleBatchStatusChange(
+                                    order.id,
+                                    batch.id,
+                                    "Preparing"
+                                  );
+                                }
+                              }}
+                              className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-semibold transition"
+                            >
+                              Accept
+                            </button>
+                          )}
+
+                          {/* Preparing */}
+
+                          {batch.status ===
+                            "Preparing" && (
+                            <button
+                              onClick={() => {
+                                if (
+                                  batch.id ===
+                                  "legacy"
+                                ) {
+                                  handleLegacyStatusChange(
+                                    order.id,
+                                    "Ready"
+                                  );
+                                } else {
+                                  handleBatchStatusChange(
+                                    order.id,
+                                    batch.id,
+                                    "Ready"
+                                  );
+                                }
+                              }}
+                              className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-semibold transition"
+                            >
+                              Ready
+                            </button>
+                          )}
+
+                          {/* Ready */}
+
+                          {batch.status ===
+                            "Ready" && (
+                            <button
+                              onClick={() => {
+                                if (
+                                  batch.id ===
+                                  "legacy"
+                                ) {
+                                  handleLegacyStatusChange(
+                                    order.id,
+                                    "Completed"
+                                  );
+                                } else {
+                                  handleBatchStatusChange(
+                                    order.id,
+                                    batch.id,
+                                    "Completed"
+                                  );
+                                }
+                              }}
+                              className="bg-gray-700 hover:bg-gray-800 px-5 py-2 rounded-lg font-semibold transition"
+                            >
+                              Complete
+                            </button>
+                          )}
+
+                        </div>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+
+                {/* -------------------------------- */}
+                {/* Special Instructions */}
+                {/* -------------------------------- */}
+
+                {order.instructions && (
+                  <div className="mt-6 bg-zinc-800 rounded-xl p-4">
+
+                    <p className="font-bold">
+                      Special Instructions
+                    </p>
+
+                    <p className="mt-2 text-gray-300">
+                      {order.instructions}
+                    </p>
+
+                  </div>
+                )}
+
+                {/* -------------------------------- */}
+                {/* Overall Total */}
+                {/* -------------------------------- */}
+
+                <div className="border-t border-zinc-700 mt-6 pt-5 flex justify-between items-center">
+
+                  <span className="text-xl font-bold">
+                    Total
+                  </span>
+
+                  <span className="text-2xl font-bold text-yellow-400">
+                    ₹{order.total}
+                  </span>
+
+                </div>
 
               </div>
-
-            </div>
-
-          ))}
+            );
+          })}
 
         </div>
       )}

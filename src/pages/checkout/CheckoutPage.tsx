@@ -33,28 +33,42 @@ function CheckoutPage() {
       return;
     }
 
-    const order = {
+    const createdAt = new Date().toISOString();
+
+const order = {
+  id: Date.now().toString(),
+  table,
+  customerName,
+  phone,
+  instructions,
+  items,
+  total,
+  status: "Pending" as const,
+  createdAt,
+
+  batches: [
+    {
       id: Date.now().toString(),
-      table,
-      customerName,
-      phone,
-      instructions,
       items,
-      total,
       status: "Pending" as const,
-      createdAt: new Date().toISOString(),
-    };
+      createdAt,
+    },
+  ],
+};
 
     try {
-      console.log("Placing Order...", order);
-
       const orderId = await orderService.placeOrder(order);
+      localStorage.setItem( `activeOrderId_table_${table}`,orderId
+);
 
-clearCart();
-
-navigate(`/track/${orderId}`);
-
+      clearCart();
+      
       navigate("/success");
+
+      // Go directly to live tracking
+      navigate(`/track/${orderId}`, {
+        replace: true,
+      });
     } catch (error) {
       console.error("Firebase Error:", error);
 
@@ -67,7 +81,7 @@ navigate(`/track/${orderId}`);
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-6">
+    <div className="min-h-screen bg-black text-white px-5 py-10 max-w-3xl mx-auto">
 
       <button
         onClick={() => navigate("/cart")}
@@ -90,7 +104,9 @@ navigate(`/track/${orderId}`);
           type="text"
           placeholder="Customer Name"
           value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
+          onChange={(e) =>
+            setCustomerName(e.target.value)
+          }
           className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
         />
 
@@ -98,7 +114,9 @@ navigate(`/track/${orderId}`);
           type="tel"
           placeholder="Phone Number (Optional)"
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) =>
+            setPhone(e.target.value)
+          }
           className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
         />
 
@@ -106,7 +124,9 @@ navigate(`/track/${orderId}`);
           rows={4}
           placeholder="Special Instructions (Optional)"
           value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
+          onChange={(e) =>
+            setInstructions(e.target.value)
+          }
           className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
         />
 
