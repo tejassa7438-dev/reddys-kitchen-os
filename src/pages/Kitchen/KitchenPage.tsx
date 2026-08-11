@@ -20,220 +20,321 @@ import type {
   OrderStatus,
 } from "../../types/order";
 
-function KitchenPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  // -----------------------------------------
-  // Previous Firestore snapshot
-  // -----------------------------------------
+function KitchenPage() {
+
+  const [
+    orders,
+    setOrders,
+  ] = useState<Order[]>([]);
+
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+
+  // =========================================
+  // PREVIOUS ORDERS
+  // =========================================
 
   const previousOrdersRef =
     useRef<Order[] | null>(null);
 
-  // -----------------------------------------
-  // Notification audio
-  // -----------------------------------------
+
+  // =========================================
+  // NOTIFICATION AUDIO
+  // =========================================
 
   const notificationAudioRef =
     useRef<HTMLAudioElement | null>(null);
 
-  const playOrderSound = () => {
-    if (!notificationAudioRef.current) {
-      notificationAudioRef.current = new Audio(
-        "/sounds/order-received.mp3"
-      );
 
-      notificationAudioRef.current.loop = true;
-      notificationAudioRef.current.volume = 1;
+  const playOrderSound = () => {
+
+    if (
+      !notificationAudioRef.current
+    ) {
+
+      notificationAudioRef.current =
+        new Audio(
+          "/sounds/order-received.mp3"
+        );
+
+
+      notificationAudioRef.current.loop =
+        true;
+
+
+      notificationAudioRef.current.volume =
+        1;
     }
+
 
     const audio =
       notificationAudioRef.current;
 
-    if (audio.paused) {
-      audio.currentTime = 0;
 
-      audio.play().catch((error) => {
-        console.log(
-          "Kitchen order sound could not play:",
-          error
-        );
-      });
+    if (audio.paused) {
+
+      audio.currentTime =
+        0;
+
+
+      audio.play().catch(
+        (error) => {
+
+          console.log(
+            "Kitchen order sound could not play:",
+            error
+          );
+
+        }
+      );
     }
   };
 
+
   const stopOrderSound = () => {
-    if (!notificationAudioRef.current) {
+
+    if (
+      !notificationAudioRef.current
+    ) {
+
       return;
     }
 
+
     notificationAudioRef.current.pause();
-    notificationAudioRef.current.currentTime = 0;
+
+
+    notificationAudioRef.current.currentTime =
+      0;
   };
 
-  // -----------------------------------------
-  // Firestore Orders
-  // -----------------------------------------
+
+  // =========================================
+  // FIRESTORE ORDERS
+  // =========================================
 
   useEffect(() => {
+
     console.log(
       "Kitchen page connected to Firestore"
     );
 
-    const q = query(
-      collection(db, "orders"),
-      orderBy("createdAt", "desc")
-    );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        console.log(
-          "Orders found:",
-          snapshot.size
-        );
+    const q =
+      query(
+        collection(
+          db,
+          "orders"
+        ),
+        orderBy(
+          "createdAt",
+          "desc"
+        )
+      );
 
-        const data: Order[] =
-          snapshot.docs.map((doc) => ({
-            ...(doc.data() as Order),
-            id: doc.id,
-          }));
 
-        const previousOrders =
-          previousOrdersRef.current;
+    const unsubscribe =
+      onSnapshot(
+        q,
+        (snapshot) => {
 
-        // -------------------------------------
-        // Initial page load
-        // Do NOT play sound
-        // -------------------------------------
+          console.log(
+            "Orders found:",
+            snapshot.size
+          );
 
-        if (previousOrders === null) {
-          previousOrdersRef.current = data;
 
-          setOrders(data);
-          setLoading(false);
+          const data: Order[] =
+            snapshot.docs.map(
+              (document) => ({
 
-          return;
-        }
+                ...(document.data() as Order),
 
-        // -------------------------------------
-        // Detect genuinely new order
-        // -------------------------------------
+                id:
+                  document.id,
 
-        const newOrderDetected =
-          data.some((newOrder) => {
-            return !previousOrders.some(
-              (oldOrder) =>
-                oldOrder.id === newOrder.id
+              })
             );
-          });
 
-        // -------------------------------------
-        // Detect genuinely new batch
-        // -------------------------------------
 
-        const newBatchDetected =
-          data.some((newOrder) => {
-            const oldOrder =
-              previousOrders.find(
-                (oldOrder) =>
-                  oldOrder.id ===
-                  newOrder.id
+          const previousOrders =
+            previousOrdersRef.current;
+
+
+          // -------------------------------------
+          // Don't alert on initial page load
+          // -------------------------------------
+
+          if (
+            previousOrders !== null
+          ) {
+
+            // -----------------------------------
+            // New order
+            // -----------------------------------
+
+            const newOrderDetected =
+              data.length >
+              previousOrders.length;
+
+
+            // -----------------------------------
+            // New same-table batch
+            // -----------------------------------
+
+            const newBatchDetected =
+              data.some(
+                (newOrder) => {
+
+                  const oldOrder =
+                    previousOrders.find(
+                      (oldOrder) =>
+                        oldOrder.id ===
+                        newOrder.id
+                    );
+
+
+                  if (!oldOrder) {
+
+                    return false;
+                  }
+
+
+                  return (
+                    (
+                      newOrder.batches
+                        ?.length ??
+                      0
+                    ) >
+                    (
+                      oldOrder.batches
+                        ?.length ??
+                      0
+                    )
+                  );
+
+                }
               );
 
-            if (!oldOrder) {
-              return false;
-            }
 
-            const oldBatchIds = new Set(
-              (oldOrder.batches ?? []).map(
-                (batch) => batch.id
-              )
-            );
+            // -----------------------------------
+            // Check pending batches
+            // -----------------------------------
 
-            return (
-              newOrder.batches?.some(
-                (batch) =>
-                  !oldBatchIds.has(batch.id)
-              ) ?? false
-            );
-          });
+            const hasPendingBatch =
+              data.some(
+                (order) => {
 
-        // -------------------------------------
-        // Check for pending work
-        // -------------------------------------
+                  if (
+                    order.batches &&
+                    order.batches.length >
+                      0
+                  ) {
 
-        const hasPendingBatch =
-          data.some((order) => {
+                    return order.batches.some(
+                      (batch) =>
+                        batch.status ===
+                        "Pending"
+                    );
+
+                  }
+
+
+                  return (
+                    order.status ===
+                    "Pending"
+                  );
+
+                }
+              );
+
+
+            // -----------------------------------
+            // New order / batch
+            // -----------------------------------
+
             if (
-              order.batches &&
-              order.batches.length > 0
+              newOrderDetected ||
+              newBatchDetected
             ) {
-              return order.batches.some(
-                (batch) =>
-                  batch.status === "Pending"
-              );
+
+              playOrderSound();
+
             }
 
-            return (
-              order.status === "Pending"
-            );
-          });
 
-        // -------------------------------------
-        // New order / new batch
-        // -------------------------------------
+            // -----------------------------------
+            // Nothing pending
+            // -----------------------------------
 
-        if (
-          newOrderDetected ||
-          newBatchDetected
-        ) {
-          playOrderSound();
+            if (
+              !hasPendingBatch
+            ) {
+
+              stopOrderSound();
+
+            }
+
+          }
+
+
+          previousOrdersRef.current =
+            data;
+
+
+          console.log(
+            "Orders:",
+            data
+          );
+
+
+          setOrders(
+            data
+          );
+
+
+          setLoading(
+            false
+          );
+
+        },
+
+
+        (error) => {
+
+          console.error(
+            "Firestore Error:",
+            error
+          );
+
+
+          setLoading(
+            false
+          );
+
         }
+      );
 
-        // -------------------------------------
-        // Stop ONLY when there are no
-        // pending batches remaining
-        // -------------------------------------
-
-        if (!hasPendingBatch) {
-          stopOrderSound();
-        }
-
-        // -------------------------------------
-        // Save current snapshot
-        // -------------------------------------
-
-        previousOrdersRef.current = data;
-
-        console.log(
-          "Orders:",
-          data
-        );
-
-        setOrders(data);
-        setLoading(false);
-      },
-      (error) => {
-        console.error(
-          "Firestore Error:",
-          error
-        );
-
-        setLoading(false);
-      }
-    );
 
     return () => {
+
       unsubscribe();
+
       stopOrderSound();
+
     };
+
   }, []);
 
-  // -----------------------------------------
-  // Update Batch Status
-  // -----------------------------------------
+
+  // =========================================
+  // UPDATE BATCH STATUS
+  // =========================================
 
   const handleBatchStatusChange =
     async (
@@ -241,65 +342,97 @@ function KitchenPage() {
       batchId: string,
       status: OrderStatus
     ) => {
+
       try {
+
         await kitchenService.updateBatchStatus(
           orderId,
           batchId,
           status
         );
 
-        // IMPORTANT:
-        //
-        // Do NOT stop the sound here.
-        //
-        // Firestore will send the updated
-        // snapshot. If another Pending batch
-        // exists, the sound stays active.
-        //
-        // If there are no Pending batches,
-        // the snapshot logic above stops it.
+
+        // Stop alert when accepted.
+        // If another pending batch exists,
+        // the next Firestore snapshot will
+        // keep/restart the alert.
+
+        if (
+          status === "Preparing"
+        ) {
+
+          stopOrderSound();
+
+        }
+
       } catch (error) {
-        console.error(error);
+
+        console.error(
+          error
+        );
+
 
         alert(
           "Failed to update order batch."
         );
+
       }
+
     };
 
-  // -----------------------------------------
-  // Legacy Order Status
-  // -----------------------------------------
+
+  // =========================================
+  // LEGACY ORDER STATUS
+  // =========================================
 
   const handleLegacyStatusChange =
     async (
       orderId: string,
       status: OrderStatus
     ) => {
+
       try {
+
         await kitchenService.updateStatus(
           orderId,
           status
         );
 
-        // Do not manually stop sound here.
-        // Firestore snapshot decides whether
-        // pending work still exists.
+
+        if (
+          status === "Preparing"
+        ) {
+
+          stopOrderSound();
+
+        }
+
       } catch (error) {
-        console.error(error);
+
+        console.error(
+          error
+        );
+
 
         alert(
           "Failed to update order."
         );
+
       }
+
     };
 
-  // -----------------------------------------
-  // Loading
-  // -----------------------------------------
 
-  if (loading) {
+  // =========================================
+  // LOADING
+  // =========================================
+
+  if (
+    loading
+  ) {
+
     return (
+
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
 
         <p className="text-xl text-gray-400">
@@ -307,19 +440,24 @@ function KitchenPage() {
         </p>
 
       </div>
+
     );
+
   }
 
-  // -----------------------------------------
-  // Kitchen Dashboard
-  // -----------------------------------------
+
+  // =========================================
+  // KITCHEN DASHBOARD
+  // =========================================
 
   return (
+
     <div className="min-h-screen bg-black text-white p-6">
 
       <h1 className="text-4xl font-bold text-red-600 mb-8">
         🍳 Kitchen Dashboard
       </h1>
+
 
       {orders.length === 0 ? (
 
@@ -328,6 +466,7 @@ function KitchenPage() {
           <h2 className="text-3xl text-gray-400">
             No Orders Yet
           </h2>
+
 
           <p className="text-gray-500 mt-3">
             Waiting for customers...
@@ -339,312 +478,384 @@ function KitchenPage() {
 
         <div className="space-y-6">
 
-          {orders.map((order) => {
+          {orders.map(
+            (order) => {
 
-            const batches: OrderBatch[] =
-              order.batches &&
-              order.batches.length > 0
-                ? order.batches
-                : [
-                    {
-                      id: "legacy",
-                      items: order.items,
-                      status: order.status,
-                      createdAt:
-                        order.createdAt,
-                    },
-                  ];
+              const batches:
+                OrderBatch[] =
+                order.batches &&
+                order.batches.length > 0
 
-            return (
-              <div
-                key={order.id}
-                className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 shadow-lg"
-              >
+                  ? order.batches
 
-                {/* -------------------------------- */}
-                {/* Order Header */}
-                {/* -------------------------------- */}
+                  : [
+                      {
+                        id:
+                          "legacy",
 
-                <div className="flex justify-between items-center">
+                        items:
+                          order.items,
 
-                  <div>
+                        status:
+                          order.status,
 
-                    <h2 className="text-2xl font-bold">
-                      🍽 Table {order.table}
-                    </h2>
+                        createdAt:
+                          order.createdAt,
 
-                    <p className="text-sm text-gray-500 mt-1">
-                      Order #
-                      {order.id.slice(0, 8)}
-                    </p>
+                      },
+                    ];
+
+
+              return (
+
+                <div
+                  key={
+                    order.id
+                  }
+                  className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800 shadow-lg"
+                >
+
+                  {/* ================================= */}
+                  {/* ORDER HEADER */}
+                  {/* ================================= */}
+
+                  <div className="flex justify-between items-center">
+
+                    <div>
+
+                      <h2 className="text-2xl font-bold">
+                        🍽 Table{" "}
+                        {order.table}
+                      </h2>
+
+
+                      <p className="text-sm text-gray-500 mt-1">
+                        Order #
+                        {order.id.slice(
+                          0,
+                          8
+                        )}
+                      </p>
+
+                    </div>
+
+
+                    <div className="text-right">
+
+                      <p className="text-sm text-gray-400">
+
+                        {batches.length}{" "}
+
+                        {batches.length ===
+                        1
+                          ? "batch"
+                          : "batches"}
+
+                      </p>
+
+                    </div>
 
                   </div>
 
-                  <div className="text-right">
 
-                    <p className="text-sm text-gray-400">
-                      {batches.length}{" "}
-                      {batches.length === 1
-                        ? "batch"
-                        : "batches"}
-                    </p>
+                  {/* ================================= */}
+                  {/* CUSTOMER */}
+                  {/* ================================= */}
 
-                  </div>
+                  <div className="mt-5 space-y-2">
 
-                </div>
-
-                {/* -------------------------------- */}
-                {/* Customer */}
-                {/* -------------------------------- */}
-
-                <div className="mt-5 space-y-2">
-
-                  <p>
-                    <strong>
-                      Customer:
-                    </strong>{" "}
-                    {order.customerName}
-                  </p>
-
-                  {order.phone && (
                     <p>
+
                       <strong>
-                        Phone:
+                        Customer:
                       </strong>{" "}
-                      {order.phone}
+
+                      {order.customerName}
+
                     </p>
-                  )}
 
-                  <p>
-                    <strong>
-                      Order Time:
-                    </strong>{" "}
-                    {new Date(
-                      order.createdAt
-                    ).toLocaleString()}
-                  </p>
 
-                </div>
+                    {order.phone && (
 
-                <div className="border-t border-zinc-700 my-6" />
+                      <p>
 
-                {/* -------------------------------- */}
-                {/* Kitchen Batches */}
-                {/* -------------------------------- */}
+                        <strong>
+                          Phone:
+                        </strong>{" "}
 
-                <h3 className="text-xl font-bold mb-4">
-                  Kitchen Batches
-                </h3>
+                        {order.phone}
 
-                <div className="space-y-4">
+                      </p>
 
-                  {batches.map(
-                    (batch, index) => (
+                    )}
 
-                      <div
-                        key={batch.id}
-                        className="bg-zinc-800 rounded-xl p-5 border border-zinc-700"
-                      >
 
-                        {/* Batch Header */}
+                    <p>
 
-                        <div className="flex justify-between items-center">
+                      <strong>
+                        Order Time:
+                      </strong>{" "}
 
-                          <div>
+                      {new Date(
+                        order.createdAt
+                      ).toLocaleString()}
 
-                            <h4 className="text-lg font-bold">
-                              Batch {index + 1}
-                            </h4>
+                    </p>
 
-                            <p className="text-sm text-gray-500 mt-1">
-                              {new Date(
-                                batch.createdAt
-                              ).toLocaleString()}
-                            </p>
+                  </div>
+
+
+                  <div className="border-t border-zinc-700 my-6" />
+
+
+                  {/* ================================= */}
+                  {/* BATCHES */}
+                  {/* ================================= */}
+
+                  <h3 className="text-xl font-bold mb-4">
+                    Kitchen Batches
+                  </h3>
+
+
+                  <div className="space-y-4">
+
+                    {batches.map(
+                      (
+                        batch,
+                        index
+                      ) => (
+
+                        <div
+                          key={
+                            batch.id
+                          }
+                          className="bg-zinc-800 rounded-xl p-5 border border-zinc-700"
+                        >
+
+                          <div className="flex justify-between items-center">
+
+                            <div>
+
+                              <h4 className="text-lg font-bold">
+                                Batch{" "}
+                                {index + 1}
+                              </h4>
+
+
+                              <p className="text-sm text-gray-500 mt-1">
+                                {new Date(
+                                  batch.createdAt
+                                ).toLocaleString()}
+                              </p>
+
+                            </div>
+
+
+                            <span
+                              className={`px-4 py-2 rounded-full font-semibold ${
+                                batch.status ===
+                                "Pending"
+
+                                  ? "bg-yellow-500 text-black"
+
+                                  : batch.status ===
+                                    "Preparing"
+
+                                  ? "bg-blue-600 text-white"
+
+                                  : batch.status ===
+                                    "Ready"
+
+                                  ? "bg-green-600 text-white"
+
+                                  : "bg-gray-700 text-white"
+                              }`}
+                            >
+                              {batch.status}
+                            </span>
 
                           </div>
 
-                          <span
-                            className={`px-4 py-2 rounded-full font-semibold ${
-                              batch.status ===
-                              "Pending"
-                                ? "bg-yellow-500 text-black"
-                                : batch.status ===
-                                  "Preparing"
-                                ? "bg-blue-600 text-white"
-                                : batch.status ===
-                                  "Ready"
-                                ? "bg-green-600 text-white"
-                                : "bg-gray-700 text-white"
-                            }`}
-                          >
-                            {batch.status}
-                          </span>
 
-                        </div>
+                          {/* ================================= */}
+                          {/* ITEMS */}
+                          {/* ================================= */}
 
-                        {/* -------------------------------- */}
-                        {/* Batch Items */}
-                        {/* -------------------------------- */}
+                          <div className="mt-5 space-y-2">
 
-                        <div className="mt-5 space-y-2">
+                            {batch.items.map(
+                              (item) => (
 
-                          {batch.items.map(
-                            (item) => (
+                                <div
+                                  key={
+                                    item.id
+                                  }
+                                  className="flex justify-between"
+                                >
 
-                              <div
-                                key={item.id}
-                                className="flex justify-between"
+                                  <span>
+                                    {item.name} ×{" "}
+                                    {item.quantity}
+                                  </span>
+
+
+                                  <span>
+                                    ₹
+                                    {item.price *
+                                      item.quantity}
+                                  </span>
+
+                                </div>
+
+                              )
+                            )}
+
+                          </div>
+
+
+                          {/* ================================= */}
+                          {/* BUTTONS */}
+                          {/* ================================= */}
+
+                          <div className="flex justify-end mt-5">
+
+                            {batch.status ===
+                              "Pending" && (
+
+                              <button
+                                onClick={() => {
+
+                                  if (
+                                    batch.id ===
+                                    "legacy"
+                                  ) {
+
+                                    handleLegacyStatusChange(
+                                      order.id,
+                                      "Preparing"
+                                    );
+
+                                  } else {
+
+                                    handleBatchStatusChange(
+                                      order.id,
+                                      batch.id,
+                                      "Preparing"
+                                    );
+
+                                  }
+
+                                }}
+                                className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-semibold transition"
                               >
+                                Accept
+                              </button>
 
-                                <span>
-                                  {item.name} ×{" "}
-                                  {item.quantity}
-                                </span>
+                            )}
 
-                                <span>
-                                  ₹
-                                  {item.price *
-                                    item.quantity}
-                                </span>
 
-                              </div>
+                            {batch.status ===
+                              "Preparing" && (
 
-                            )
-                          )}
-
-                        </div>
-
-                        {/* -------------------------------- */}
-                        {/* Batch Buttons */}
-                        {/* -------------------------------- */}
-
-                        <div className="flex justify-end mt-5">
-
-                          {batch.status ===
-                            "Pending" && (
-
-                            <button
-                              onClick={() => {
-
-                                if (
-                                  batch.id ===
-                                  "legacy"
-                                ) {
-
-                                  handleLegacyStatusChange(
-                                    order.id,
-                                    "Preparing"
-                                  );
-
-                                } else {
-
+                              <button
+                                onClick={() =>
                                   handleBatchStatusChange(
                                     order.id,
                                     batch.id,
-                                    "Preparing"
-                                  );
-
+                                    "Ready"
+                                  )
                                 }
+                                className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-semibold transition"
+                              >
+                                Ready
+                              </button>
 
-                              }}
-                              className="bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg font-semibold transition"
-                            >
-                              Accept
-                            </button>
+                            )}
 
-                          )}
 
-                          {batch.status ===
-                            "Preparing" && (
+                            {batch.status ===
+                              "Ready" && (
 
-                            <button
-                              onClick={() =>
-                                handleBatchStatusChange(
-                                  order.id,
-                                  batch.id,
-                                  "Ready"
-                                )
-                              }
-                              className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-semibold transition"
-                            >
-                              Ready
-                            </button>
+                              <button
+                                onClick={() =>
+                                  handleBatchStatusChange(
+                                    order.id,
+                                    batch.id,
+                                    "Completed"
+                                  )
+                                }
+                                className="bg-gray-700 hover:bg-gray-800 px-5 py-2 rounded-lg font-semibold transition"
+                              >
+                                Complete
+                              </button>
 
-                          )}
+                            )}
 
-                          {batch.status ===
-                            "Ready" && (
-
-                            <button
-                              onClick={() =>
-                                handleBatchStatusChange(
-                                  order.id,
-                                  batch.id,
-                                  "Completed"
-                                )
-                              }
-                              className="bg-gray-700 hover:bg-gray-800 px-5 py-2 rounded-lg font-semibold transition"
-                            >
-                              Complete
-                            </button>
-
-                          )}
+                          </div>
 
                         </div>
 
-                      </div>
-
-                    )
-                  )}
-
-                </div>
-
-                {/* -------------------------------- */}
-                {/* Special Instructions */}
-                {/* -------------------------------- */}
-
-                {order.instructions && (
-
-                  <div className="mt-6 bg-zinc-800 rounded-xl p-4">
-
-                    <p className="font-bold">
-                      Special Instructions
-                    </p>
-
-                    <p className="mt-2 text-gray-300">
-                      {order.instructions}
-                    </p>
+                      )
+                    )}
 
                   </div>
 
-                )}
 
-                {/* -------------------------------- */}
-                {/* Total */}
-                {/* -------------------------------- */}
+                  {/* ================================= */}
+                  {/* INSTRUCTIONS */}
+                  {/* ================================= */}
 
-                <div className="border-t border-zinc-700 mt-6 pt-5 flex justify-between items-center">
+                  {order.instructions && (
 
-                  <span className="text-xl font-bold">
-                    Total
-                  </span>
+                    <div className="mt-6 bg-zinc-800 rounded-xl p-4">
 
-                  <span className="text-2xl font-bold text-yellow-400">
-                    ₹{order.total}
-                  </span>
+                      <p className="font-bold">
+                        Special Instructions
+                      </p>
+
+
+                      <p className="mt-2 text-gray-300">
+                        {order.instructions}
+                      </p>
+
+                    </div>
+
+                  )}
+
+
+                  {/* ================================= */}
+                  {/* TOTAL */}
+                  {/* ================================= */}
+
+                  <div className="border-t border-zinc-700 mt-6 pt-5 flex justify-between items-center">
+
+                    <span className="text-xl font-bold">
+                      Total
+                    </span>
+
+
+                    <span className="text-2xl font-bold text-yellow-400">
+                      ₹
+                      {order.total}
+                    </span>
+
+                  </div>
 
                 </div>
 
-              </div>
-            );
-          })}
+              );
+
+            }
+          )}
 
         </div>
+
       )}
 
     </div>
+
   );
 }
+
 
 export default KitchenPage;

@@ -1,137 +1,605 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-import { orderService } from "../../services/orderService";
+import {
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+
+import {
+  QRCodeSVG,
+} from "qrcode.react";
+
+import {
+  orderService,
+} from "../../services/orderService";
 
 import type {
   Order,
-  OrderStatus,
 } from "../../types/order";
 
+
+// =========================================
+// RESTAURANT UPI
+// =========================================
+
+const RESTAURANT_UPI_ID =
+  "Q119977566@ybl";
+
+const RESTAURANT_NAME =
+  "REDDY'S KITCHEN";
+
+
+// =========================================
+// TRACK ORDER PAGE
+// =========================================
+
 function TrackOrderPage() {
-  const { orderId } = useParams();
-  const navigate = useNavigate();
 
-  const [order, setOrder] =
-    useState<Order | null>(null);
+  const {
+    orderId,
+  } = useParams();
 
-  // Keeps track of the previous status.
-  // This prevents the sound from playing
-  // repeatedly while Firestore updates.
-  const previousStatus =
-    useRef<OrderStatus | null>(null);
+  const navigate =
+    useNavigate();
 
-  // Prevents the Ready sound from playing
-  // more than once during this page session.
-  const readySoundPlayed =
-    useRef(false);
+
+  const [
+    order,
+    setOrder,
+  ] = useState<Order | null>(null);
+
+
+  const [
+    upiError,
+    setUpiError,
+  ] = useState("");
+
+
+  const [
+    showQR,
+    setShowQR,
+  ] = useState(false);
+
 
   // =========================================
-  // LIVE ORDER SUBSCRIPTION
+  // TRACKING
+  // =========================================
+
+  const previousTrackingStatusRef =
+    useRef<string | null>(null);
+
+
+  // =========================================
+  // READY SOUND
+  // =========================================
+
+  const notificationAudioRef =
+    useRef<HTMLAudioElement | null>(
+      null
+    );
+
+
+  const playReadySound = () => {
+
+    if (
+      !notificationAudioRef.current
+    ) {
+
+      notificationAudioRef.current =
+        new Audio(
+          "/sounds/order-received.mp3"
+        );
+
+
+      notificationAudioRef.current.volume =
+        1;
+
+
+      notificationAudioRef.current.loop =
+        false;
+
+    }
+
+
+    const audio =
+      notificationAudioRef.current;
+
+
+    audio.currentTime =
+      0;
+
+
+    audio.play().catch(
+      (error) => {
+
+        console.log(
+          "Ready notification sound could not play:",
+          error
+        );
+
+      }
+    );
+
+  };
+
+
+  const stopReadySound = () => {
+
+    if (
+      !notificationAudioRef.current
+    ) {
+
+      return;
+
+    }
+
+
+    notificationAudioRef.current.pause();
+
+
+    notificationAudioRef.current.currentTime =
+      0;
+
+  };
+
+
+  // =========================================
+  // LIVE ORDER
   // =========================================
 
   useEffect(() => {
+
     if (!orderId) {
+
       return;
+
     }
+
+
+    previousTrackingStatusRef.current =
+      null;
+
 
     const unsubscribe =
       orderService.subscribeToOrder(
         orderId,
         (data) => {
+
           setOrder(data);
+
         }
       );
 
-    return () => unsubscribe();
+
+    return () =>
+      unsubscribe();
+
   }, [orderId]);
 
-  // =========================================
-  // READY NOTIFICATION SOUND
-  // =========================================
-
-  useEffect(() => {
-    if (!order) {
-      return;
-    }
-
-    const currentStatus =
-      order.status;
-
-    // First Firestore snapshot.
-    //
-    // We don't play the sound here because
-    // the order may already be Ready when
-    // the customer opens the tracking page.
-
-    if (
-      previousStatus.current === null
-    ) {
-      previousStatus.current =
-        currentStatus;
-
-      return;
-    }
-
-    // Detect:
-    //
-    // Pending    → Ready
-    // Preparing  → Ready
-    //
-    // We only want the sound when the status
-    // actually changes INTO Ready.
-
-    if (
-      currentStatus === "Ready" &&
-      previousStatus.current !== "Ready" &&
-      !readySoundPlayed.current
-    ) {
-      const audio = new Audio(
-        "/sounds/order-ready.mp3"
-      );
-
-      audio.volume = 1;
-
-      audio.play().catch((error) => {
-        console.warn(
-          "Order ready sound could not play:",
-          error
-        );
-      });
-
-      readySoundPlayed.current = true;
-    }
-
-    // Always remember the latest status.
-
-    previousStatus.current =
-      currentStatus;
-
-  }, [order]);
 
   // =========================================
   // REMOVE COMPLETED ORDER FROM ACTIVE ORDER
   // =========================================
+  //
+  // IMPORTANT:
+  // Checkout stores BOTH:
+  //
+  // activeOrderId
+  // activeOrderId_table_X
+  //
+  // Therefore both must be removed when
+  // the kitchen completes the order.
+  //
+  // This is independent of payment.
+  //
+  // =========================================
 
   useEffect(() => {
+
     if (!order) {
+
       return;
+
     }
 
-    if (order.status === "Completed") {
+
+    if (
+      order.status ===
+      "Completed"
+    ) {
+
+      // Remove global active order.
+      localStorage.removeItem(
+        "activeOrderId"
+      );
+
+
+      // Remove table-specific active order.
       localStorage.removeItem(
         `activeOrderId_table_${order.table}`
       );
+
     }
+
   }, [order]);
+
+
+  // =========================================
+  // TRACKING STATUS
+  // =========================================
+
+  const trackingStatus =
+    !order
+
+      ? null
+
+      : order.status ===
+        "Completed"
+
+        ? "Completed"
+
+        : order.batches &&
+          order.batches.length > 0
+
+          ? order.batches.some(
+              (batch) =>
+                batch.status ===
+                "Pending"
+            )
+
+            ? "Pending"
+
+            : order.batches.some(
+                (batch) =>
+                  batch.status ===
+                  "Preparing"
+              )
+
+              ? "Preparing"
+
+              : "Ready"
+
+          : order.status;
+
+
+  // =========================================
+  // READY NOTIFICATION
+  // =========================================
+
+  useEffect(() => {
+
+    if (!trackingStatus) {
+
+      return;
+
+    }
+
+
+    if (
+      previousTrackingStatusRef.current !==
+        null &&
+
+      previousTrackingStatusRef.current !==
+        "Ready" &&
+
+      trackingStatus ===
+        "Ready"
+    ) {
+
+      playReadySound();
+
+    }
+
+
+    previousTrackingStatusRef.current =
+      trackingStatus;
+
+  }, [trackingStatus]);
+
+
+  // =========================================
+  // STOP AUDIO
+  // =========================================
+
+  useEffect(() => {
+
+    return () => {
+
+      stopReadySound();
+
+    };
+
+  }, []);
+
+
+  // =========================================
+  // UPI PAYMENT DATA
+  // =========================================
+
+  const getUPIPaymentUrl = () => {
+
+    if (!order) {
+
+      return "";
+
+    }
+
+
+    const amount =
+      Number(order.total);
+
+
+    const transactionNote =
+      `REDDY'S KITCHEN - Table ${order.table} - Order ${order.id}`;
+
+
+    return (
+      `upi://pay` +
+
+      `?pa=${encodeURIComponent(
+        RESTAURANT_UPI_ID
+      )}` +
+
+      `&pn=${encodeURIComponent(
+        RESTAURANT_NAME
+      )}` +
+
+      `&am=${encodeURIComponent(
+        amount.toFixed(2)
+      )}` +
+
+      `&cu=INR` +
+
+      `&tn=${encodeURIComponent(
+        transactionNote
+      )}`
+    );
+
+  };
+
+
+  // =========================================
+  // GOOGLE PAY
+  // =========================================
+
+  const handleGooglePay = () => {
+
+    if (!order) {
+
+      return;
+
+    }
+
+
+    setUpiError("");
+
+
+    const amount =
+      Number(order.total);
+
+
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+
+      setUpiError(
+        "Invalid payment amount."
+      );
+
+      return;
+
+    }
+
+
+    const transactionNote =
+      `REDDY'S KITCHEN - Table ${order.table}`;
+
+
+    const url =
+      `gpay://upi/pay` +
+
+      `?pa=${encodeURIComponent(
+        RESTAURANT_UPI_ID
+      )}` +
+
+      `&pn=${encodeURIComponent(
+        RESTAURANT_NAME
+      )}` +
+
+      `&am=${encodeURIComponent(
+        amount.toFixed(2)
+      )}` +
+
+      `&cu=INR` +
+
+      `&tn=${encodeURIComponent(
+        transactionNote
+      )}`;
+
+
+    window.location.href =
+      url;
+
+  };
+
+
+  // =========================================
+  // PHONEPE
+  // =========================================
+
+  const handlePhonePe = () => {
+
+    if (!order) {
+
+      return;
+
+    }
+
+
+    setUpiError("");
+
+
+    const amount =
+      Number(order.total);
+
+
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+
+      setUpiError(
+        "Invalid payment amount."
+      );
+
+      return;
+
+    }
+
+
+    const transactionNote =
+      `REDDY'S KITCHEN - Table ${order.table}`;
+
+
+    const url =
+      `phonepe://pay` +
+
+      `?pa=${encodeURIComponent(
+        RESTAURANT_UPI_ID
+      )}` +
+
+      `&pn=${encodeURIComponent(
+        RESTAURANT_NAME
+      )}` +
+
+      `&am=${encodeURIComponent(
+        amount.toFixed(2)
+      )}` +
+
+      `&cu=INR` +
+
+      `&tn=${encodeURIComponent(
+        transactionNote
+      )}`;
+
+
+    window.location.href =
+      url;
+
+  };
+
+
+  // =========================================
+  // PAYTM
+  // =========================================
+
+  const handlePaytm = () => {
+
+    if (!order) {
+
+      return;
+
+    }
+
+
+    setUpiError("");
+
+
+    const amount =
+      Number(order.total);
+
+
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+
+      setUpiError(
+        "Invalid payment amount."
+      );
+
+      return;
+
+    }
+
+
+    const transactionNote =
+      `REDDY'S KITCHEN - Table ${order.table}`;
+
+
+    const url =
+      `paytmmp://pay` +
+
+      `?pa=${encodeURIComponent(
+        RESTAURANT_UPI_ID
+      )}` +
+
+      `&pn=${encodeURIComponent(
+        RESTAURANT_NAME
+      )}` +
+
+      `&am=${encodeURIComponent(
+        amount.toFixed(2)
+      )}` +
+
+      `&cu=INR` +
+
+      `&tn=${encodeURIComponent(
+        transactionNote
+      )}`;
+
+
+    window.location.href =
+      url;
+
+  };
+
+
+  // =========================================
+  // SHOW QR
+  // =========================================
+
+  const handleShowQR = () => {
+
+    if (!order) {
+
+      return;
+
+    }
+
+
+    setUpiError("");
+
+
+    setShowQR(true);
+
+  };
+
+
+  // =========================================
+  // UPI QR VALUE
+  // =========================================
+
+  const upiQRValue =
+    order
+      ? getUPIPaymentUrl()
+      : "";
+
 
   // =========================================
   // LOADING
   // =========================================
 
   if (!order) {
+
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center px-5">
+
+      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
 
         <div className="text-center">
 
@@ -139,9 +607,11 @@ function TrackOrderPage() {
             🍳
           </div>
 
+
           <h1 className="text-2xl font-bold">
             Loading Order...
           </h1>
+
 
           <p className="text-gray-500 mt-2">
             Please wait while we find your order.
@@ -150,155 +620,267 @@ function TrackOrderPage() {
         </div>
 
       </div>
+
     );
+
   }
 
+
   // =========================================
-  // STATUS HELPERS
+  // STATUS COLOR
   // =========================================
 
-  const statusSteps: OrderStatus[] = [
-    "Pending",
-    "Preparing",
-    "Ready",
-    "Completed",
-  ];
+  const getColor = () => {
 
-  const statusIndex =
-    statusSteps.indexOf(
-      order.status
-    );
+    switch (
+      trackingStatus
+    ) {
 
-  const getStatusColor = () => {
-    switch (order.status) {
       case "Pending":
         return "text-yellow-400";
 
       case "Preparing":
-        return "text-orange-400";
+        return "text-blue-400";
 
       case "Ready":
         return "text-green-400";
 
       case "Completed":
-        return "text-gray-300";
+        return "text-gray-400";
 
       default:
         return "text-white";
+
     }
+
   };
 
-  const getStatusMessage = () => {
-    switch (order.status) {
-      case "Pending":
-        return "Your order has been received and is waiting for the kitchen.";
-
-      case "Preparing":
-        return "The kitchen is preparing your order right now.";
-
-      case "Ready":
-        return "Your order is ready. Please collect it when called.";
-
-      case "Completed":
-        return "Your order has been completed. Thank you for dining with us!";
-
-      default:
-        return "Your order is being processed.";
-    }
-  };
-
-  const getStepIcon = (
-    step: OrderStatus
-  ) => {
-    switch (step) {
-      case "Pending":
-        return "📋";
-
-      case "Preparing":
-        return "👨‍🍳";
-
-      case "Ready":
-        return "🔔";
-
-      case "Completed":
-        return "✅";
-
-      default:
-        return "•";
-    }
-  };
-
-  const isStepCompleted = (
-    index: number
-  ) => {
-    return index <= statusIndex;
-  };
 
   // =========================================
-  // PAGE
+  // PAYMENT PENDING
+  // =========================================
+
+  const paymentPending =
+    order.status ===
+      "Completed" &&
+
+    order.paymentStatus !==
+      "Paid";
+
+
+  // =========================================
+  // UI
   // =========================================
 
   return (
-    <div className="min-h-screen bg-black text-white px-5 py-10">
 
-      <div className="max-w-3xl mx-auto">
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center px-5 py-10">
 
-        {/* ================================= */}
-        {/* HEADER */}
-        {/* ================================= */}
+      {/* HEADER */}
 
-        <div className="text-center">
+      <h1 className="text-5xl font-bold text-red-600 text-center">
+        REDDY'S KITCHEN
+      </h1>
 
-          <h1 className="text-4xl md:text-5xl font-bold text-red-600">
-            REDDY'S KITCHEN
+
+      <p className="text-gray-400 mt-3 text-center">
+        Live Order Tracking
+      </p>
+
+
+      {/* ORDER CARD */}
+
+      <div className="bg-zinc-900 rounded-3xl mt-10 p-8 w-full max-w-2xl border border-zinc-800">
+
+        {/* TABLE */}
+
+        <h2 className="text-3xl font-bold">
+          Table {order.table}
+        </h2>
+
+
+        {/* CUSTOMER */}
+
+        <p className="mt-4 text-xl">
+
+          Customer:{" "}
+
+          <span className="text-yellow-400">
+            {order.customerName}
+          </span>
+
+        </p>
+
+
+        {/* CURRENT STATUS */}
+
+        <div className="mt-10">
+
+          <h3 className="text-xl text-gray-400">
+            Current Status
+          </h3>
+
+
+          <h1
+            className={`text-6xl font-bold mt-3 ${getColor()}`}
+          >
+            {trackingStatus}
           </h1>
-
-          <p className="text-gray-400 mt-3">
-            Live Order Tracking
-          </p>
 
         </div>
 
-        {/* ================================= */}
-        {/* ORDER CARD */}
-        {/* ================================= */}
 
-        <div className="bg-zinc-900 rounded-3xl mt-10 p-6 md:p-8 border border-zinc-800">
+        {/* PAYMENT PENDING */}
 
-          {/* Order Header */}
+        {paymentPending && (
 
-          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-5">
+          <div className="mt-8 bg-yellow-950/30 border border-yellow-700 rounded-xl p-5">
 
-            <div>
+            <p className="text-yellow-400 text-xl font-bold">
+              💳 Payment Pending
+            </p>
 
-              <p className="text-sm text-gray-500">
-                Order ID
-              </p>
 
-              <p className="font-mono text-sm text-gray-300 mt-1 break-all">
-                #{order.id}
-              </p>
+            <p className="text-gray-400 mt-2">
+              Your order has been served.
+              Please complete your payment.
+            </p>
 
-              <h2 className="text-3xl font-bold mt-5">
-                Table {order.table}
-              </h2>
 
-              <p className="mt-2 text-gray-300">
-                Customer:{" "}
-                <span className="text-yellow-400 font-semibold">
-                  {order.customerName}
-                </span>
-              </p>
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              {/* Google Pay */}
+
+              <button
+                type="button"
+                onClick={
+                  handleGooglePay
+                }
+                className="bg-white text-black hover:bg-gray-200 active:bg-gray-300 px-4 py-3 rounded-xl font-bold transition"
+              >
+                🟢 Google Pay
+              </button>
+
+
+              {/* PhonePe */}
+
+              <button
+                type="button"
+                onClick={
+                  handlePhonePe
+                }
+                className="bg-purple-700 hover:bg-purple-800 active:bg-purple-900 text-white px-4 py-3 rounded-xl font-bold transition"
+              >
+                🟣 PhonePe
+              </button>
+
+
+              {/* Paytm */}
+
+              <button
+                type="button"
+                onClick={
+                  handlePaytm
+                }
+                className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-4 py-3 rounded-xl font-bold transition"
+              >
+                🔵 Paytm
+              </button>
+
+
+              {/* QR */}
+
+              <button
+                type="button"
+                onClick={
+                  handleShowQR
+                }
+                className="bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-600 text-white px-4 py-3 rounded-xl font-bold transition"
+              >
+                📷 Scan UPI QR
+              </button>
 
             </div>
 
-            <div className="md:text-right">
+
+            {/* QR CODE */}
+
+            {showQR && (
+
+              <div className="mt-6 bg-white rounded-2xl p-6 text-center">
+
+                <p className="text-zinc-900 font-bold text-xl">
+                  Scan to Pay
+                </p>
+
+
+                <p className="text-zinc-600 text-sm mt-1">
+                  ₹{order.total}
+                </p>
+
+
+                <div className="mt-5 flex justify-center">
+
+                  <QRCodeSVG
+                    value={
+                      upiQRValue
+                    }
+                    size={240}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                    level="M"
+                    includeMargin
+                  />
+
+                </div>
+
+
+                <p className="text-zinc-500 text-xs mt-4 break-all">
+                  {RESTAURANT_UPI_ID}
+                </p>
+
+
+                <p className="text-zinc-500 text-xs mt-2">
+                  Scan this QR with any supported UPI app.
+                </p>
+
+              </div>
+
+            )}
+
+
+            {/* CASH */}
+
+            <div className="mt-4">
+
+              <div className="inline-flex bg-green-600/20 border border-green-700 text-green-400 px-4 py-2 rounded-xl font-semibold">
+                💵 Cash available at counter
+              </div>
+
+            </div>
+
+
+            {/* ERROR */}
+
+            {upiError && (
+
+              <div className="mt-4 bg-red-950/40 border border-red-800 text-red-300 rounded-xl p-3 text-sm">
+                {upiError}
+              </div>
+
+            )}
+
+
+            {/* AMOUNT */}
+
+            <div className="mt-5">
 
               <p className="text-sm text-gray-500">
-                Order Total
+                Amount Due
               </p>
 
-              <p className="text-3xl font-bold text-yellow-400 mt-1">
+
+              <p className="text-3xl font-bold text-yellow-400">
                 ₹{order.total}
               </p>
 
@@ -306,327 +888,350 @@ function TrackOrderPage() {
 
           </div>
 
-          {/* ================================= */}
-          {/* CURRENT STATUS */}
-          {/* ================================= */}
+        )}
 
-          <div className="mt-10 text-center">
 
-            <p className="text-gray-500 text-sm uppercase tracking-wider">
-              Current Status
+        {/* PAYMENT COMPLETED */}
+
+        {order.paymentStatus ===
+          "Paid" && (
+
+          <div className="mt-8 bg-green-900/30 border border-green-700 rounded-xl p-5">
+
+            <p className="text-green-400 text-xl font-bold">
+              ✅ Payment Completed
             </p>
 
-            <h2
-              className={`text-5xl md:text-6xl font-bold mt-3 ${getStatusColor()}`}
-            >
-              {order.status}
-            </h2>
 
-            <p className="text-gray-400 mt-4 max-w-xl mx-auto">
-              {getStatusMessage()}
+            <p className="text-gray-400 mt-2">
+              Payment received successfully.
             </p>
+
+
+            {order.paymentMethod && (
+
+              <p className="text-sm text-gray-500 mt-2">
+
+                Payment method:{" "}
+
+                <span className="text-white font-semibold">
+                  {order.paymentMethod}
+                </span>
+
+              </p>
+
+            )}
 
           </div>
 
-          {/* ================================= */}
-          {/* PROGRESS TRACKER */}
-          {/* ================================= */}
+        )}
 
-          <div className="mt-10">
 
-            <div className="grid grid-cols-4 gap-2">
+        {/* STATUS PROGRESS */}
 
-              {statusSteps.map(
-                (step, index) => {
+        <div className="mt-8">
 
-                  const completed =
-                    isStepCompleted(
-                      index
-                    );
+          {/* Status labels */}
 
-                  const current =
-                    order.status ===
-                    step;
+          <div className="grid grid-cols-4 gap-2">
 
-                  return (
-                    <div
-                      key={step}
-                      className="text-center"
-                    >
+            {/* Pending */}
 
-                      <div
-                        className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center text-xl transition ${
-                          completed
-                            ? "bg-green-600 text-white"
-                            : "bg-zinc-800 text-gray-600"
-                        } ${
-                          current
-                            ? "ring-4 ring-green-600/30"
-                            : ""
-                        }`}
-                      >
-                        {getStepIcon(
-                          step
-                        )}
-                      </div>
+            <div className="text-center">
 
-                      <p
-                        className={`text-xs md:text-sm font-semibold mt-3 ${
-                          completed
-                            ? "text-white"
-                            : "text-gray-600"
-                        }`}
-                      >
-                        {step}
-                      </p>
+              <p
+                className={`text-xs sm:text-sm font-bold ${
+                  trackingStatus ===
+                    "Pending" ||
+                  trackingStatus ===
+                    "Preparing" ||
+                  trackingStatus ===
+                    "Ready" ||
+                  trackingStatus ===
+                    "Completed"
 
-                    </div>
-                  );
-                }
-              )}
+                    ? "text-yellow-400"
+
+                    : "text-gray-600"
+                }`}
+              >
+                Pending
+              </p>
 
             </div>
 
-            <div className="mt-5 h-2 bg-zinc-800 rounded-full overflow-hidden">
+
+            {/* Preparing */}
+
+            <div className="text-center">
+
+              <p
+                className={`text-xs sm:text-sm font-bold ${
+                  trackingStatus ===
+                    "Preparing" ||
+                  trackingStatus ===
+                    "Ready" ||
+                  trackingStatus ===
+                    "Completed"
+
+                    ? "text-blue-400"
+
+                    : "text-gray-600"
+                }`}
+              >
+                Preparing
+              </p>
+
+            </div>
+
+
+            {/* Ready */}
+
+            <div className="text-center">
+
+              <p
+                className={`text-xs sm:text-sm font-bold ${
+                  trackingStatus ===
+                    "Ready" ||
+                  trackingStatus ===
+                    "Completed"
+
+                    ? "text-green-400"
+
+                    : "text-gray-600"
+                }`}
+              >
+                Ready
+              </p>
+
+            </div>
+
+
+            {/* Completed */}
+
+            <div className="text-center">
+
+              <p
+                className={`text-xs sm:text-sm font-bold ${
+                  trackingStatus ===
+                    "Completed"
+
+                    ? "text-gray-300"
+
+                    : "text-gray-600"
+                }`}
+              >
+                Completed
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* Progressive Bar */}
+
+          <div className="relative mt-3 px-[8%]">
+
+            <div className="h-2 bg-zinc-800 rounded-full w-full" />
+
+
+            <div
+              className="absolute left-[8%] top-0 h-2 rounded-full transition-all duration-700"
+              style={{
+                width:
+                  trackingStatus ===
+                    "Pending"
+
+                    ? "0%"
+
+                    : trackingStatus ===
+                      "Preparing"
+
+                      ? "28%"
+
+                      : trackingStatus ===
+                        "Ready"
+
+                        ? "62%"
+
+                        : trackingStatus ===
+                          "Completed"
+
+                          ? "84%"
+
+                          : "0%",
+              }}
+            />
+
+
+            {/* Progress dots */}
+
+            <div className="absolute inset-x-[8%] top-1/2 -translate-y-1/2 flex justify-between">
 
               <div
-                className="h-full bg-green-600 transition-all duration-500"
-                style={{
-                  width:
-                    statusIndex === 0
-                      ? "0%"
-                      : `${
-                          (statusIndex /
-                            (statusSteps.length -
-                              1)) *
-                          100
-                        }%`,
-                }}
+                className={`w-4 h-4 rounded-full border-2 border-zinc-950 transition-all duration-500 ${
+                  trackingStatus ===
+                    "Pending" ||
+                  trackingStatus ===
+                    "Preparing" ||
+                  trackingStatus ===
+                    "Ready" ||
+                  trackingStatus ===
+                    "Completed"
+
+                    ? "bg-yellow-400"
+
+                    : "bg-zinc-700"
+                }`}
+              />
+
+
+              <div
+                className={`w-4 h-4 rounded-full border-2 border-zinc-950 transition-all duration-500 ${
+                  trackingStatus ===
+                    "Preparing" ||
+                  trackingStatus ===
+                    "Ready" ||
+                  trackingStatus ===
+                    "Completed"
+
+                    ? "bg-blue-400"
+
+                    : "bg-zinc-700"
+                }`}
+              />
+
+
+              <div
+                className={`w-4 h-4 rounded-full border-2 border-zinc-950 transition-all duration-500 ${
+                  trackingStatus ===
+                    "Ready" ||
+                  trackingStatus ===
+                    "Completed"
+
+                    ? "bg-green-400"
+
+                    : "bg-zinc-700"
+                }`}
+              />
+
+
+              <div
+                className={`w-4 h-4 rounded-full border-2 border-zinc-950 transition-all duration-500 ${
+                  trackingStatus ===
+                    "Completed"
+
+                    ? "bg-gray-300"
+
+                    : "bg-zinc-700"
+                }`}
               />
 
             </div>
 
           </div>
 
-          {/* ================================= */}
-          {/* ORDERED ITEMS */}
-          {/* ================================= */}
+        </div>
 
-          <div className="mt-10">
 
-            <h3 className="text-2xl font-bold mb-5">
-              Ordered Items
-            </h3>
+        {/* ORDERED ITEMS */}
 
-            <div className="space-y-3">
+        <div className="mt-10">
 
-              {order.items.map(
-                (item) => (
+          <h3 className="text-2xl font-bold mb-5">
+            Ordered Items
+          </h3>
 
-                  <div
-                    key={item.id}
-                    className="flex justify-between items-center py-3 border-b border-zinc-800"
-                  >
 
-                    <div>
+          <div className="space-y-3">
 
-                      <p className="font-semibold">
-                        {item.name}
-                      </p>
+            {order.items.map(
+              (item) => (
 
-                      <p className="text-sm text-gray-500">
-                        ₹{item.price} ×{" "}
-                        {item.quantity}
-                      </p>
+                <div
+                  key={item.id}
+                  className="flex justify-between py-2 border-b border-zinc-800"
+                >
 
-                    </div>
+                  <span>
+                    {item.name} ×{" "}
+                    {item.quantity}
+                  </span>
 
-                    <p className="font-semibold">
-                      ₹
-                      {item.price *
-                        item.quantity}
-                    </p>
 
-                  </div>
-
-                )
-              )}
-
-            </div>
-
-          </div>
-
-          {/* ================================= */}
-          {/* BATCH INFORMATION */}
-          {/* ================================= */}
-
-          {order.batches &&
-            order.batches.length > 0 && (
-
-              <div className="mt-10">
-
-                <h3 className="text-2xl font-bold mb-5">
-                  Kitchen Progress
-                </h3>
-
-                <div className="space-y-4">
-
-                  {order.batches.map(
-                    (batch, index) => (
-
-                      <div
-                        key={batch.id}
-                        className="bg-zinc-800 rounded-2xl p-4"
-                      >
-
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-
-                          <div>
-
-                            <p className="font-semibold">
-                              Batch{" "}
-                              {index + 1}
-                            </p>
-
-                            <p className="text-sm text-gray-500 mt-1">
-                              {batch.items.length}{" "}
-                              item
-                              {batch.items.length ===
-                              1
-                                ? ""
-                                : "s"}
-                            </p>
-
-                          </div>
-
-                          <span
-                            className={`px-3 py-1 rounded-full text-sm font-semibold w-fit ${
-                              batch.status ===
-                              "Pending"
-                                ? "bg-yellow-600 text-black"
-                                : batch.status ===
-                                  "Preparing"
-                                ? "bg-orange-600 text-white"
-                                : batch.status ===
-                                  "Ready"
-                                ? "bg-green-600 text-white"
-                                : "bg-blue-600 text-white"
-                            }`}
-                          >
-                            {batch.status}
-                          </span>
-
-                        </div>
-
-                        <div className="mt-3 space-y-1">
-
-                          {batch.items.map(
-                            (item) => (
-
-                              <div
-                                key={item.id}
-                                className="flex justify-between text-sm text-gray-400"
-                              >
-
-                                <span>
-                                  {item.quantity}{" "}
-                                  ×{" "}
-                                  {item.name}
-                                </span>
-
-                                <span>
-                                  ₹
-                                  {item.price *
-                                    item.quantity}
-                                </span>
-
-                              </div>
-
-                            )
-                          )}
-
-                        </div>
-
-                      </div>
-
-                    )
-                  )}
+                  <span>
+                    ₹
+                    {item.price *
+                      item.quantity}
+                  </span>
 
                 </div>
 
-              </div>
-
+              )
             )}
 
-          {/* ================================= */}
-          {/* SPECIAL INSTRUCTIONS */}
-          {/* ================================= */}
-
-          {order.instructions && (
-
-            <div className="mt-8 bg-zinc-800 rounded-2xl p-5">
-
-              <p className="text-sm text-gray-400">
-                Special Instructions
-              </p>
-
-              <p className="mt-2 text-gray-200">
-                {order.instructions}
-              </p>
-
-            </div>
-
-          )}
-
-          {/* ================================= */}
-          {/* COMPLETED */}
-          {/* ================================= */}
-
-          {order.status ===
-            "Completed" && (
-
-            <div className="mt-8 bg-green-900/30 border border-green-700 rounded-2xl p-6 text-center">
-
-              <div className="text-4xl">
-                🎉
-              </div>
-
-              <p className="text-green-400 text-xl font-bold mt-3">
-                Order Completed!
-              </p>
-
-              <p className="text-gray-400 mt-2">
-                Thank you for dining with
-                REDDY'S KITCHEN.
-              </p>
-
-            </div>
-
-          )}
+          </div>
 
         </div>
 
-        {/* ================================= */}
-        {/* BACK HOME */}
-        {/* ================================= */}
 
-        <div className="text-center">
+        {/* TOTAL */}
 
-          <button
-            onClick={() =>
-              navigate("/")
-            }
-            className="mt-10 bg-red-600 hover:bg-red-700 px-8 py-4 rounded-xl font-bold transition"
-          >
-            Back Home
-          </button>
+        <div className="border-t border-zinc-700 mt-8 pt-6 flex justify-between">
+
+          <span className="text-2xl font-bold">
+            Total
+          </span>
+
+
+          <span className="text-2xl font-bold text-yellow-400">
+            ₹{order.total}
+          </span>
 
         </div>
+
+
+        {/* COMPLETED MESSAGE */}
+
+        {trackingStatus ===
+          "Completed" && (
+
+          <div className="mt-8 bg-green-900/30 border border-green-700 rounded-xl p-5 text-center">
+
+            <p className="text-green-400 text-xl font-bold">
+              🎉 Order Completed!
+            </p>
+
+
+            <p className="text-gray-400 mt-2">
+              Thank you for dining with
+              REDDY'S KITCHEN.
+            </p>
+
+          </div>
+
+        )}
 
       </div>
 
+
+      {/* BACK HOME */}
+
+      <button
+        type="button"
+        onClick={() =>
+          navigate("/")
+        }
+        className="mt-10 bg-red-600 hover:bg-red-700 px-8 py-4 rounded-xl font-bold transition"
+      >
+        Back Home
+      </button>
+
     </div>
+
   );
 }
+
 
 export default TrackOrderPage;

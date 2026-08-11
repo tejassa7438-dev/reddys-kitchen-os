@@ -30,6 +30,11 @@ function OrdersManagement() {
   const [tableFilter, setTableFilter] =
     useState("All");
 
+  const [view, setView] =
+    useState<"Active" | "History">(
+      "Active"
+    );
+
   // =========================================
   // LIVE ORDERS
   // =========================================
@@ -67,49 +72,92 @@ function OrdersManagement() {
   }, [orders]);
 
   // =========================================
+  // ACTIVE / HISTORY ORDERS
+  // =========================================
+
+  const activeOrders = useMemo(() => {
+    return orders.filter(
+      (order) =>
+        order.status !==
+        "Completed"
+    );
+  }, [orders]);
+
+  const completedOrders = useMemo(() => {
+    return orders.filter(
+      (order) =>
+        order.status ===
+        "Completed"
+    );
+  }, [orders]);
+
+  // =========================================
+  // CURRENT VIEW ORDERS
+  // =========================================
+
+  const currentViewOrders =
+    view === "Active"
+      ? activeOrders
+      : completedOrders;
+
+  // =========================================
   // FILTER ORDERS
   // =========================================
 
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const searchText =
-        search.toLowerCase();
+    return currentViewOrders.filter(
+      (order) => {
+        const searchText =
+          search.toLowerCase();
 
-      const matchesSearch =
-        order.customerName
-          .toLowerCase()
-          .includes(searchText) ||
-        order.table
-          .toString()
-          .includes(searchText) ||
-        order.id
-          .toLowerCase()
-          .includes(searchText);
+        const matchesSearch =
+          order.customerName
+            .toLowerCase()
+            .includes(searchText) ||
+          order.table
+            .toString()
+            .includes(searchText) ||
+          order.id
+            .toLowerCase()
+            .includes(searchText);
 
-      const matchesStatus =
-        status === "All" ||
-        order.status === status;
+        const matchesStatus =
+          status === "All" ||
+          order.status === status;
 
-      const matchesTable =
-        tableFilter === "All" ||
-        order.table.toString() ===
-          tableFilter;
+        const matchesTable =
+          tableFilter === "All" ||
+          order.table.toString() ===
+            tableFilter;
 
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesTable
-      );
-    });
+        return (
+          matchesSearch &&
+          matchesStatus &&
+          matchesTable
+        );
+      }
+    );
   }, [
-    orders,
+    currentViewOrders,
     search,
     status,
     tableFilter,
   ]);
 
   // =========================================
-  // UPDATE ORDER STATUS
+  // REVENUE
+  // =========================================
+
+  const completedRevenue = useMemo(() => {
+    return completedOrders.reduce(
+      (sum, order) =>
+        sum + order.total,
+      0
+    );
+  }, [completedOrders]);
+
+  // =========================================
+  // UPDATE STATUS
   // =========================================
 
   async function updateStatus(
@@ -221,17 +269,24 @@ function OrdersManagement() {
   function getStatusClass(
     orderStatus: OrderStatus
   ) {
-    if (orderStatus === "Pending") {
+    if (
+      orderStatus ===
+      "Pending"
+    ) {
       return "bg-yellow-600 text-black";
     }
 
     if (
-      orderStatus === "Preparing"
+      orderStatus ===
+      "Preparing"
     ) {
       return "bg-orange-600 text-white";
     }
 
-    if (orderStatus === "Ready") {
+    if (
+      orderStatus ===
+      "Ready"
+    ) {
       return "bg-green-600 text-white";
     }
 
@@ -259,7 +314,10 @@ function OrdersManagement() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
 
+        {/* Total */}
+
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+
           <p className="text-gray-400">
             Total Orders
           </p>
@@ -267,55 +325,92 @@ function OrdersManagement() {
           <p className="text-3xl font-bold mt-2">
             {orders.length}
           </p>
+
         </div>
 
+        {/* Active */}
+
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+
           <p className="text-gray-400">
-            Pending
+            Active Orders
           </p>
 
           <p className="text-3xl font-bold text-yellow-400 mt-2">
-            {
-              orders.filter(
-                (order) =>
-                  order.status ===
-                  "Pending"
-              ).length
-            }
+            {activeOrders.length}
           </p>
+
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <p className="text-gray-400">
-            Preparing
-          </p>
-
-          <p className="text-3xl font-bold text-orange-400 mt-2">
-            {
-              orders.filter(
-                (order) =>
-                  order.status ===
-                  "Preparing"
-              ).length
-            }
-          </p>
-        </div>
+        {/* Completed */}
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+
           <p className="text-gray-400">
-            Ready
+            Completed
           </p>
 
           <p className="text-3xl font-bold text-green-400 mt-2">
-            {
-              orders.filter(
-                (order) =>
-                  order.status ===
-                  "Ready"
-              ).length
-            }
+            {completedOrders.length}
           </p>
+
         </div>
+
+        {/* Revenue */}
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+
+          <p className="text-gray-400">
+            Completed Revenue
+          </p>
+
+          <p className="text-3xl font-bold text-yellow-400 mt-2">
+            ₹{completedRevenue}
+          </p>
+
+        </div>
+
+      </div>
+
+      {/* ===================================== */}
+      {/* VIEW SWITCHER */}
+      {/* ===================================== */}
+
+      <div className="flex flex-wrap gap-3 mb-6">
+
+        <button
+          onClick={() => {
+            setView("Active");
+            setStatus("All");
+          }}
+          className={`px-6 py-3 rounded-xl font-bold transition ${
+            view === "Active"
+              ? "bg-red-600 text-white"
+              : "bg-zinc-800 text-gray-300 hover:bg-zinc-700"
+          }`}
+        >
+          🟢 Active Orders
+          <span className="ml-2 opacity-70">
+            {activeOrders.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setView("History");
+            setStatus("All");
+          }}
+          className={`px-6 py-3 rounded-xl font-bold transition ${
+            view === "History"
+              ? "bg-blue-600 text-white"
+              : "bg-zinc-800 text-gray-300 hover:bg-zinc-700"
+          }`}
+        >
+          📋 Order History
+          <span className="ml-2 opacity-70">
+            {completedOrders.length}
+          </span>
+        </button>
 
       </div>
 
@@ -353,25 +448,33 @@ function OrdersManagement() {
             }
             className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 outline-none focus:border-red-500"
           >
+
             <option value="All">
               All Statuses
             </option>
 
-            <option value="Pending">
-              Pending
-            </option>
+            {view === "Active" && (
+              <>
+                <option value="Pending">
+                  Pending
+                </option>
 
-            <option value="Preparing">
-              Preparing
-            </option>
+                <option value="Preparing">
+                  Preparing
+                </option>
 
-            <option value="Ready">
-              Ready
-            </option>
+                <option value="Ready">
+                  Ready
+                </option>
+              </>
+            )}
 
-            <option value="Completed">
-              Completed
-            </option>
+            {view === "History" && (
+              <option value="Completed">
+                Completed
+              </option>
+            )}
+
           </select>
 
           {/* Table */}
@@ -385,33 +488,63 @@ function OrdersManagement() {
             }
             className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 outline-none focus:border-red-500"
           >
+
             <option value="All">
               All Tables
             </option>
 
-            {tables.map((table) => (
-              <option
-                key={table}
-                value={table}
-              >
-                Table #{table}
-              </option>
-            ))}
+            {tables.map(
+              (table) => (
+                <option
+                  key={table}
+                  value={table}
+                >
+                  Table #{table}
+                </option>
+              )
+            )}
+
           </select>
 
         </div>
 
         <div className="mt-4 text-sm text-gray-400">
+
           Showing{" "}
+
           <span className="text-white font-semibold">
             {filteredOrders.length}
           </span>{" "}
-          of{" "}
-          <span className="text-white font-semibold">
-            {orders.length}
-          </span>{" "}
+
+          {view === "Active"
+            ? "active"
+            : "completed"}{" "}
           orders
+
         </div>
+
+      </div>
+
+      {/* ===================================== */}
+      {/* SECTION TITLE */}
+      {/* ===================================== */}
+
+      <div className="flex items-center justify-between mb-5">
+
+        <h2 className="text-2xl font-bold">
+
+          {view === "Active"
+            ? "Active Orders"
+            : "Order History"}
+
+        </h2>
+
+        {view === "History" && (
+          <p className="text-green-400 font-semibold">
+            Revenue: ₹
+            {completedRevenue}
+          </p>
+        )}
 
       </div>
 
@@ -421,10 +554,25 @@ function OrdersManagement() {
 
       <div className="space-y-6">
 
-        {filteredOrders.length === 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10 text-center text-gray-400">
-            No orders found.
+        {filteredOrders.length ===
+          0 && (
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10 text-center">
+
+            <div className="text-5xl mb-4">
+              {view === "Active"
+                ? "📦"
+                : "📋"}
+            </div>
+
+            <p className="text-gray-400">
+              {view === "Active"
+                ? "No active orders."
+                : "No completed orders yet."}
+            </p>
+
           </div>
+
         )}
 
         {filteredOrders.map(
@@ -559,104 +707,109 @@ function OrdersManagement() {
                 order.batches.length >
                   0 && (
 
-                  <div className="border-t border-zinc-800 mt-6 pt-6">
+                <div className="border-t border-zinc-800 mt-6 pt-6">
 
-                    <h3 className="font-semibold text-lg mb-3">
-                      Order Batches
-                    </h3>
+                  <h3 className="font-semibold text-lg mb-3">
+                    Order Batches
+                  </h3>
 
-                    <div className="space-y-3">
+                  <div className="space-y-3">
 
-                      {order.batches.map(
-                        (batch, index) => (
+                    {order.batches.map(
+                      (
+                        batch,
+                        index
+                      ) => (
 
-                          <div
-                            key={
-                              batch.id
-                            }
-                            className="bg-zinc-800 rounded-xl p-4"
-                          >
+                        <div
+                          key={
+                            batch.id
+                          }
+                          className="bg-zinc-800 rounded-xl p-4"
+                        >
 
-                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
 
-                              <div>
+                            <div>
 
-                                <p className="font-semibold">
-                                  Batch{" "}
-                                  {index + 1}
-                                </p>
+                              <p className="font-semibold">
+                                Batch{" "}
+                                {index +
+                                  1}
+                              </p>
 
-                                <p className="text-sm text-gray-500 mt-1">
-                                  {new Date(
-                                    batch.createdAt
-                                  ).toLocaleString()}
-                                </p>
-
-                              </div>
-
-                              <span
-                                className={`px-3 py-1 rounded-full text-sm font-semibold w-fit ${getStatusClass(
-                                  batch.status
-                                )}`}
-                              >
-                                {
-                                  batch.status
-                                }
-                              </span>
+                              <p className="text-sm text-gray-500 mt-1">
+                                {new Date(
+                                  batch.createdAt
+                                ).toLocaleString()}
+                              </p>
 
                             </div>
 
-                            <div className="mt-3 space-y-2">
-
-                              {batch.items.map(
-                                (item) => (
-
-                                  <div
-                                    key={
-                                      item.id
-                                    }
-                                    className="flex justify-between text-sm text-gray-300"
-                                  >
-
-                                    <span>
-                                      {
-                                        item.quantity
-                                      }{" "}
-                                      ×{" "}
-                                      {
-                                        item.name
-                                      }
-                                    </span>
-
-                                    <span>
-                                      ₹
-                                      {item.price *
-                                        item.quantity}
-                                    </span>
-
-                                  </div>
-
-                                )
-                              )}
-
-                            </div>
+                            <span
+                              className={`px-3 py-1 rounded-full text-sm font-semibold w-fit ${getStatusClass(
+                                batch.status
+                              )}`}
+                            >
+                              {
+                                batch.status
+                              }
+                            </span>
 
                           </div>
 
-                        )
-                      )}
+                          <div className="mt-3 space-y-2">
 
-                    </div>
+                            {batch.items.map(
+                              (item) => (
+
+                                <div
+                                  key={
+                                    item.id
+                                  }
+                                  className="flex justify-between text-sm text-gray-300"
+                                >
+
+                                  <span>
+                                    {
+                                      item.quantity
+                                    }{" "}
+                                    ×{" "}
+                                    {
+                                      item.name
+                                    }
+                                  </span>
+
+                                  <span>
+                                    ₹
+                                    {item.price *
+                                      item.quantity}
+                                  </span>
+
+                                </div>
+
+                              )
+                            )}
+
+                          </div>
+
+                        </div>
+
+                      )
+                    )}
 
                   </div>
 
-                )}
+                </div>
+
+              )}
 
               {/* ================================= */}
               {/* SPECIAL INSTRUCTIONS */}
               {/* ================================= */}
 
               {order.instructions && (
+
                 <div className="mt-6 rounded-xl bg-zinc-800 p-4">
 
                   <p className="text-sm text-gray-400 mb-1">
@@ -668,6 +821,7 @@ function OrdersManagement() {
                   </p>
 
                 </div>
+
               )}
 
               {/* ================================= */}
@@ -676,72 +830,97 @@ function OrdersManagement() {
 
               <div className="border-t border-zinc-800 mt-6 pt-6">
 
-                <p className="text-sm text-gray-500 mb-3">
-                  Change Order Status
-                </p>
+                {view === "Active" ? (
 
-                <div className="flex flex-wrap gap-3">
+                  <>
 
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      updateStatus(
-                        order.id,
-                        "Pending"
-                      )
-                    }
-                  >
-                    Pending
-                  </Button>
+                    <p className="text-sm text-gray-500 mb-3">
+                      Change Order Status
+                    </p>
 
-                  <Button
-                    variant="primary"
-                    onClick={() =>
-                      updateStatus(
-                        order.id,
-                        "Preparing"
-                      )
-                    }
-                  >
-                    Preparing
-                  </Button>
+                    <div className="flex flex-wrap gap-3">
 
-                  <Button
-                    variant="success"
-                    onClick={() =>
-                      updateStatus(
-                        order.id,
-                        "Ready"
-                      )
-                    }
-                  >
-                    Ready
-                  </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          updateStatus(
+                            order.id,
+                            "Pending"
+                          )
+                        }
+                      >
+                        Pending
+                      </Button>
 
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      updateStatus(
-                        order.id,
-                        "Completed"
-                      )
-                    }
-                  >
-                    Completed
-                  </Button>
+                      <Button
+                        variant="primary"
+                        onClick={() =>
+                          updateStatus(
+                            order.id,
+                            "Preparing"
+                          )
+                        }
+                      >
+                        Preparing
+                      </Button>
 
-                  <Button
-                    variant="danger"
-                    onClick={() =>
-                      deleteOrder(
-                        order.id
-                      )
-                    }
-                  >
-                    Delete
-                  </Button>
+                      <Button
+                        variant="success"
+                        onClick={() =>
+                          updateStatus(
+                            order.id,
+                            "Ready"
+                          )
+                        }
+                      >
+                        Ready
+                      </Button>
 
-                </div>
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          updateStatus(
+                            order.id,
+                            "Completed"
+                          )
+                        }
+                      >
+                        Completed
+                      </Button>
+
+                      <Button
+                        variant="danger"
+                        onClick={() =>
+                          deleteOrder(
+                            order.id
+                          )
+                        }
+                      >
+                        Delete
+                      </Button>
+
+                    </div>
+
+                  </>
+
+                ) : (
+
+                  <div className="flex flex-wrap gap-3">
+
+                    <Button
+                      variant="danger"
+                      onClick={() =>
+                        deleteOrder(
+                          order.id
+                        )
+                      }
+                    >
+                      Delete Record
+                    </Button>
+
+                  </div>
+
+                )}
 
               </div>
 

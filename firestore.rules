@@ -1,0 +1,338 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================
+    // AUTH HELPERS
+    // =========================================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function customer() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider
+          == "anonymous";
+    }
+
+    function staff() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider
+          != "anonymous";
+    }
+
+
+    // =========================================
+    // MENU
+    // =========================================
+
+    match /menu/{menuId} {
+
+      allow read: if true;
+
+      allow create, update, delete:
+        if staff();
+    }
+
+
+    // =========================================
+    // CATEGORIES
+    // =========================================
+
+    match /categories/{categoryId} {
+
+      allow read: if true;
+
+      allow create, update, delete:
+        if staff();
+    }
+
+
+    // =========================================
+    // SETTINGS
+    // =========================================
+
+    match /settings/{settingId} {
+
+      allow read:
+        if signedIn();
+
+      allow create, update, delete:
+        if staff();
+    }
+
+
+    // =========================================
+    // ORDERS
+    // =========================================
+
+    match /orders/{orderId} {
+
+      // =======================================
+      // READ ONE ORDER
+      // =======================================
+
+      allow get: if
+        staff()
+        ||
+        (
+          customer()
+          &&
+          resource.data.customerUid ==
+            request.auth.uid
+        );
+
+
+      // =======================================
+      // LIST ALL ORDERS
+      // =======================================
+      //
+      // Kitchen/Admin only.
+      //
+      // Customers can NEVER list all orders.
+      //
+      // =======================================
+
+      allow list:
+        if staff();
+
+
+      // =======================================
+      // CREATE ORDER
+      // =======================================
+
+      allow create: if
+        customer()
+
+        &&
+
+        request.resource.data.customerUid ==
+          request.auth.uid
+
+        &&
+
+        request.resource.data.tableSessionId
+          is string
+
+        &&
+
+        request.resource.data.tableSessionId
+          .size() >= 20
+
+        &&
+
+        request.resource.data.tableSessionId
+          .size() <= 200
+
+        &&
+
+        request.resource.data.table is int
+
+        &&
+
+        request.resource.data.table >= 1
+
+        &&
+
+        request.resource.data.table <= 12
+
+        &&
+
+        request.resource.data.status ==
+          "Pending"
+
+        &&
+
+        request.resource.data.paymentStatus ==
+          "Unpaid"
+
+        &&
+
+        request.resource.data.paymentMethod ==
+          null
+
+        &&
+
+        request.resource.data.paidAt ==
+          null
+
+        &&
+
+        request.resource.data.items is list
+
+        &&
+
+        request.resource.data.items.size() > 0
+
+        &&
+
+        request.resource.data.total >= 0;
+
+
+      // =======================================
+      // STAFF UPDATE
+      // =======================================
+
+      allow update:
+        if staff();
+
+
+      // =======================================
+      // CUSTOMER APPEND / STACK ORDER
+      // =======================================
+      //
+      // Customer may update ONLY their own
+      // active unpaid order.
+      //
+      // This is what allows:
+      //
+      // Pending   → Pending
+      // Preparing → Pending
+      // Ready     → Pending
+      //
+      // when the customer orders another item.
+      //
+      // Completed orders CANNOT be reopened.
+      //
+      // =======================================
+
+      allow update: if
+
+        customer()
+
+        // ---------------------------------------
+        // Existing order belongs to this customer
+        // ---------------------------------------
+
+        &&
+
+        resource.data.customerUid ==
+          request.auth.uid
+
+        // ---------------------------------------
+        // Ownership cannot be changed
+        // ---------------------------------------
+
+        &&
+
+        request.resource.data.customerUid ==
+          resource.data.customerUid
+
+        // ---------------------------------------
+        // Table cannot change
+        // ---------------------------------------
+
+        &&
+
+        request.resource.data.table ==
+          resource.data.table
+
+        // ---------------------------------------
+        // Table session cannot change
+        // ---------------------------------------
+
+        &&
+
+        request.resource.data.tableSessionId ==
+          resource.data.tableSessionId
+
+        // ---------------------------------------
+        // Existing order must still be unpaid
+        // ---------------------------------------
+
+        &&
+
+        resource.data.paymentStatus ==
+          "Unpaid"
+
+        // ---------------------------------------
+        // New order must remain unpaid
+        // ---------------------------------------
+
+        &&
+
+        request.resource.data.paymentStatus ==
+          "Unpaid"
+
+        // ---------------------------------------
+        // No customer payment details
+        // ---------------------------------------
+
+        &&
+
+        request.resource.data.paymentMethod ==
+          null
+
+        &&
+
+        request.resource.data.paidAt ==
+          null
+
+        // ---------------------------------------
+        // Customer may only modify these fields
+        // ---------------------------------------
+
+        &&
+
+        request.resource.data.diff(
+          resource.data
+        ).affectedKeys().hasOnly([
+          "items",
+          "batches",
+          "total",
+          "status",
+          "customerName",
+          "phone",
+          "instructions"
+        ])
+
+        // ---------------------------------------
+        // IMPORTANT
+        //
+        // Adding another item always puts the
+        // order back into Pending.
+        //
+        // This allows:
+        //
+        // Pending   → Pending
+        // Preparing → Pending
+        // Ready     → Pending
+        //
+        // But NOT:
+        //
+        // Completed → Pending
+        //
+        // ---------------------------------------
+
+        &&
+
+        resource.data.status !=
+          "Completed"
+
+        &&
+
+        request.resource.data.status ==
+          "Pending";
+
+
+      // =======================================
+      // DELETE
+      // =======================================
+
+      allow delete:
+        if staff();
+    }
+
+
+    // =========================================
+    // DENY EVERYTHING ELSE
+    // =========================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

@@ -1,10 +1,14 @@
 import { NavLink } from "react-router-dom";
+
 import {
   LayoutDashboard,
   UtensilsCrossed,
   ClipboardList,
   ChefHat,
   Settings,
+  CreditCard,
+  BarChart3,
+  Table2,
 } from "lucide-react";
 
 interface Props {
@@ -29,6 +33,21 @@ const navItems = [
     icon: ClipboardList,
   },
   {
+    name: "Tables",
+    path: "/admin/tables",
+    icon: Table2,
+  },
+  {
+    name: "Billing",
+    path: "/admin/billing",
+    icon: CreditCard,
+  },
+  {
+    name: "Sales Reports",
+    path: "/admin/reports",
+    icon: BarChart3,
+  },
+  {
     name: "Kitchen",
     path: "/kitchen",
     icon: ChefHat,
@@ -45,9 +64,11 @@ function AdminLayout({
   children,
 }: Props) {
   return (
-    <div className="min-h-screen bg-black text-white flex">
+    <div className="min-h-screen bg-zinc-950 text-white flex">
 
-      {/* Sidebar */}
+      {/* ================================= */}
+      {/* SIDEBAR */}
+      {/* ================================= */}
 
       <aside className="w-72 bg-zinc-900 border-r border-zinc-800 p-6 flex flex-col">
 
@@ -55,36 +76,48 @@ function AdminLayout({
           🍽 REDDY'S KITCHEN
         </h1>
 
-        <nav className="space-y-3">
+        <nav className="space-y-2">
 
           {navItems.map((item) => {
+
             const Icon = item.icon;
 
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
+                end={item.path === "/admin"}
                 className={({ isActive }) =>
                   `flex items-center gap-3 p-4 rounded-xl transition ${
                     isActive
-                      ? "bg-red-600"
-                      : "hover:bg-zinc-800"
+                      ? "bg-red-600 text-white"
+                      : "text-gray-300 hover:bg-zinc-800 hover:text-white"
                   }`
                 }
               >
+
                 <Icon size={22} />
-                <span>{item.name}</span>
+
+                <span>
+                  {item.name}
+                </span>
+
               </NavLink>
             );
+
           })}
 
         </nav>
 
       </aside>
 
-      {/* Main */}
+      {/* ================================= */}
+      {/* MAIN */}
+      {/* ================================= */}
 
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-w-0">
+
+        {/* HEADER */}
 
         <header className="border-b border-zinc-800 bg-zinc-950 px-8 py-6">
 
@@ -93,6 +126,8 @@ function AdminLayout({
           </h2>
 
         </header>
+
+        {/* CONTENT */}
 
         <div className="flex-1 p-8 overflow-auto">
 

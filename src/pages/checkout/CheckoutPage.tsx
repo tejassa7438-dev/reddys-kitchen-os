@@ -1,125 +1,532 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useMemo,
+  useState,
+} from "react";
 
-import { useCartStore } from "../../store/cartStore";
-import { useTableStore } from "../../store/tableStore";
-import { orderService } from "../../services/orderService";
+import {
+  useNavigate,
+} from "react-router-dom";
+
+import {
+  customerAuth,
+  ensureCustomerAuth,
+} from "../../services/firebase";
+
+import {
+  useCartStore,
+} from "../../store/cartStore";
+
+import {
+  useTableStore,
+} from "../../store/tableStore";
+
+import {
+  orderService,
+} from "../../services/orderService";
+
+import type {
+  Order,
+  OrderItem,
+} from "../../types/order";
+
 
 function CheckoutPage() {
-  const navigate = useNavigate();
 
-  const { items, clearCart } = useCartStore();
-  const { table } = useTableStore();
+  const navigate =
+    useNavigate();
 
-  const [customerName, setCustomerName] =
+
+  const {
+    items,
+    clearCart,
+  } =
+    useCartStore();
+
+
+  const {
+    table,
+    tableSessionId,
+  } =
+    useTableStore();
+
+
+  const [
+    customerName,
+    setCustomerName,
+  ] =
     useState("");
 
-  const [phone, setPhone] =
+
+  const [
+    phone,
+    setPhone,
+  ] =
     useState("");
 
-  const [instructions, setInstructions] =
+
+  const [
+    instructions,
+    setInstructions,
+  ] =
     useState("");
 
-  const total = useMemo(() => {
-    return items.reduce(
-      (sum, item) =>
-        sum +
-        item.price * item.quantity,
-      0
-    );
-  }, [items]);
 
-  const placeOrder = async () => {
-    if (items.length === 0) {
-      alert("Your cart is empty.");
-      return;
-    }
+  const [
+    placingOrder,
+    setPlacingOrder,
+  ] =
+    useState(false);
 
-    if (!customerName.trim()) {
-      alert("Please enter your name.");
-      return;
-    }
 
-    const createdAt =
-      new Date().toISOString();
+  // =========================================
+  // TOTAL
+  // =========================================
 
-    const order = {
-      id: Date.now().toString(),
+  const total =
+    useMemo(() => {
 
-      table,
+      return items.reduce(
+        (
+          sum,
+          item
+        ) =>
+          sum +
+          item.price *
+            item.quantity,
 
-      customerName:
-        customerName.trim(),
+        0
+      );
 
-      phone: phone.trim(),
+    }, [items]);
 
-      instructions:
-        instructions.trim(),
 
-      items,
+  // =========================================
+  // PLACE ORDER
+  // =========================================
 
-      total,
+  const placeOrder =
+    async () => {
 
-      status: "Pending" as const,
+      // ---------------------------------------
+      // Empty cart
+      // ---------------------------------------
 
-      createdAt,
+      if (
+        items.length === 0
+      ) {
 
-      batches: [
-        {
-          id: Date.now().toString(),
+        alert(
+          "Your cart is empty."
+        );
 
-          items,
+        return;
 
-          status: "Pending" as const,
+      }
+
+
+      // ---------------------------------------
+      // Table check
+      // ---------------------------------------
+
+      if (
+        !Number.isInteger(table) ||
+        table < 1
+      ) {
+
+        alert(
+          "Table information is missing. Please reload the menu."
+        );
+
+        return;
+
+      }
+
+
+      // ---------------------------------------
+      // Table session check
+      // ---------------------------------------
+
+      if (
+        !tableSessionId ||
+        typeof tableSessionId !==
+          "string"
+      ) {
+
+        alert(
+          "Table session not found. Please reload the menu."
+        );
+
+        return;
+
+      }
+
+
+      // ---------------------------------------
+      // Customer name
+      // ---------------------------------------
+
+      if (
+        !customerName.trim()
+      ) {
+
+        alert(
+          "Please enter your name."
+        );
+
+        return;
+
+      }
+
+
+      // ---------------------------------------
+      // Prevent double click
+      // ---------------------------------------
+
+      if (
+        placingOrder
+      ) {
+
+        return;
+
+      }
+
+
+      setPlacingOrder(
+        true
+      );
+
+
+      try {
+
+        // =====================================
+        // ENSURE CUSTOMER AUTH
+        // =====================================
+        //
+        // IMPORTANT:
+        // This uses customerAuth, NOT staff auth.
+        //
+        // This means opening the customer menu
+        // will NOT log the kitchen/admin account
+        // out.
+        //
+        // =====================================
+
+        const customerUid =
+          await ensureCustomerAuth();
+
+
+        const currentUser =
+          customerAuth.currentUser;
+
+
+        if (
+          !currentUser ||
+          !currentUser.isAnonymous
+        ) {
+
+          throw new Error(
+            "Customer session could not be established."
+          );
+
+        }
+
+
+        // =====================================
+        // VERIFY UID
+        // =====================================
+
+        if (
+          currentUser.uid !==
+          customerUid
+        ) {
+
+          throw new Error(
+            "Customer authentication changed. Please reload the menu."
+          );
+
+        }
+
+
+        // =====================================
+        // CONVERT CART ITEMS
+        // =====================================
+
+        const orderItems:
+          OrderItem[] =
+          items.map(
+            (item) => ({
+
+              id:
+                String(
+                  item.id
+                ),
+
+              name:
+                item.name,
+
+              price:
+                item.price,
+
+              quantity:
+                item.quantity,
+
+            })
+          );
+
+
+        // =====================================
+        // CREATED TIME
+        // =====================================
+
+        const createdAt =
+          new Date()
+            .toISOString();
+
+
+        // =====================================
+        // NEW BATCH
+        // =====================================
+
+        const batch = {
+
+          id:
+            `${Date.now()}-batch-1`,
+
+          items:
+            orderItems,
+
+          status:
+            "Pending" as const,
 
           createdAt,
-        },
-      ],
-    };
 
-    try {
-      const orderId =
-        await orderService.placeOrder(
+        };
+
+
+        // =====================================
+        // BUILD ORDER
+        // =====================================
+
+        const order:
+          Order = {
+
+            id:
+              Date.now()
+                .toString(),
+
+            table,
+
+            tableSessionId,
+
+            customerUid,
+
+            customerName:
+              customerName.trim(),
+
+            phone:
+              phone.trim(),
+
+            instructions:
+              instructions.trim(),
+
+            items:
+              orderItems,
+
+            batches:
+              [batch],
+
+            total,
+
+            status:
+              "Pending",
+
+            paymentStatus:
+              "Unpaid",
+
+            paymentMethod:
+              null,
+
+            paidAt:
+              null,
+
+            createdAt,
+
+          };
+
+
+        console.log(
+          "Placing customer order:",
           order
         );
 
-      // Table-specific active order
-      localStorage.setItem(
-        `activeOrderId_table_${table}`,
-        orderId
-      );
 
-      // Generic active order
-      // used by the Success page
-      localStorage.setItem(
-        "activeOrderId",
-        orderId
-      );
+        // =====================================
+        // CREATE OR APPEND
+        // =====================================
+        console.log(
+  "========== CUSTOMER ORDER DEBUG =========="
+);
 
-      clearCart();
+console.log(
+  "Current customer UID:",
+  customerAuth.currentUser?.uid
+);
 
-      navigate("/success");
+console.log(
+  "Order customer UID:",
+  order.customerUid
+);
 
-    } catch (error) {
-      console.error(
-        "Firebase Error:",
-        error
-      );
+console.log(
+  "Same UID?:",
+  customerAuth.currentUser?.uid ===
+    order.customerUid
+);
 
-      if (
-        error instanceof Error
-      ) {
-        alert(error.message);
-      } else {
-        alert(
-          "Unknown error while placing order."
+console.log(
+  "Table:",
+  order.table
+);
+
+console.log(
+  "Table session:",
+  order.tableSessionId
+);
+
+console.log(
+  "=========================================="
+);
+        const orderId =
+          await orderService.placeOrder(
+            order
+          );
+
+
+        // =====================================
+        // REMEMBER ACTIVE ORDER
+        // =====================================
+
+        localStorage.setItem(
+          "activeOrderId",
+          orderId
         );
+
+
+        localStorage.setItem(
+          `activeOrderId_table_${table}`,
+          orderId
+        );
+
+
+        // =====================================
+        // CLEAR CART
+        // =====================================
+
+        clearCart();
+
+
+        // =====================================
+        // GO TO TRACKING
+        // =====================================
+
+        navigate(
+          `/track/${orderId}`,
+          {
+            replace: true,
+          }
+        );
+
+      } catch (
+        error
+      ) {
+
+        console.error(
+          "Customer order error:",
+          error
+        );
+
+
+        if (
+          error instanceof Error
+        ) {
+
+          switch (
+            error.message
+          ) {
+
+            case "ORDER_OWNER_MISMATCH":
+
+              alert(
+                "This order belongs to another customer session. Please reload the menu."
+              );
+
+              break;
+
+
+            case "TABLE_SESSION_MISMATCH":
+
+              alert(
+                "This table session has changed. Please reload the menu."
+              );
+
+              break;
+
+
+            case "ORDER_ALREADY_COMPLETED":
+
+              alert(
+                "That order has already been completed. A new order will be created."
+              );
+
+              break;
+
+
+            case "EXISTING_ORDER_NOT_FOUND":
+
+              alert(
+                "The previous order could not be found. Please try again."
+              );
+
+              break;
+
+
+            default:
+
+              alert(
+                error.message ||
+                "Unable to place your order. Please try again."
+              );
+
+              break;
+
+          }
+
+        } else {
+
+          alert(
+            "Unable to place your order. Please try again."
+          );
+
+        }
+
+      } finally {
+
+        setPlacingOrder(
+          false
+        );
+
       }
-    }
-  };
+
+    };
+
+
+  // =========================================
+  // UI
+  // =========================================
 
   return (
-    <div className="min-h-screen bg-black text-white px-5 py-8">
+
+    <div className="min-h-screen bg-black text-white p-6">
 
       <div className="max-w-3xl mx-auto">
 
@@ -128,6 +535,7 @@ function CheckoutPage() {
         {/* ================================= */}
 
         <button
+          type="button"
           onClick={() =>
             navigate("/cart")
           }
@@ -135,6 +543,7 @@ function CheckoutPage() {
         >
           ← Back to Cart
         </button>
+
 
         {/* ================================= */}
         {/* HEADER */}
@@ -144,9 +553,11 @@ function CheckoutPage() {
           Checkout
         </h1>
 
+
         <p className="mt-2 text-gray-400">
           Table {table}
         </p>
+
 
         {/* ================================= */}
         {/* CUSTOMER DETAILS */}
@@ -157,40 +568,55 @@ function CheckoutPage() {
           <input
             type="text"
             placeholder="Customer Name"
-            value={customerName}
-            onChange={(e) =>
+            value={
+              customerName
+            }
+            onChange={(
+              event
+            ) =>
               setCustomerName(
-                e.target.value
+                event.target.value
               )
             }
             className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
           />
+
 
           <input
             type="tel"
             placeholder="Phone Number (Optional)"
-            value={phone}
-            onChange={(e) =>
+            value={
+              phone
+            }
+            onChange={(
+              event
+            ) =>
               setPhone(
-                e.target.value
+                event.target.value
               )
             }
             className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
           />
 
+
           <textarea
             rows={4}
             placeholder="Special Instructions (Optional)"
-            value={instructions}
-            onChange={(e) =>
+            value={
+              instructions
+            }
+            onChange={(
+              event
+            ) =>
               setInstructions(
-                e.target.value
+                event.target.value
               )
             }
             className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
           />
 
         </div>
+
 
         {/* ================================= */}
         {/* ORDER SUMMARY */}
@@ -202,6 +628,7 @@ function CheckoutPage() {
             Order Summary
           </h2>
 
+
           {items.length === 0 ? (
 
             <p className="text-gray-400">
@@ -211,27 +638,34 @@ function CheckoutPage() {
           ) : (
 
             <>
-              {items.map((item) => (
 
-                <div
-                  key={item.id}
-                  className="flex justify-between py-2"
-                >
+              {items.map(
+                (item) => (
 
-                  <span>
-                    {item.name} ×{" "}
-                    {item.quantity}
-                  </span>
+                  <div
+                    key={
+                      item.id
+                    }
+                    className="flex justify-between py-2"
+                  >
 
-                  <span>
-                    ₹
-                    {item.price *
-                      item.quantity}
-                  </span>
+                    <span>
+                      {item.name} ×{" "}
+                      {item.quantity}
+                    </span>
 
-                </div>
 
-              ))}
+                    <span>
+                      ₹
+                      {item.price *
+                        item.quantity}
+                    </span>
+
+                  </div>
+
+                )
+              )}
+
 
               <div className="border-t border-zinc-700 mt-6 pt-6 flex justify-between text-2xl font-bold">
 
@@ -239,35 +673,47 @@ function CheckoutPage() {
                   Total
                 </span>
 
+
                 <span className="text-yellow-400">
                   ₹{total}
                 </span>
 
               </div>
+
             </>
 
           )}
 
         </div>
 
+
         {/* ================================= */}
         {/* PLACE ORDER */}
         {/* ================================= */}
 
         <button
-          onClick={placeOrder}
+          type="button"
+          onClick={
+            placeOrder
+          }
           disabled={
-            items.length === 0
+            items.length === 0 ||
+            placingOrder
           }
           className="w-full mt-8 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-4 rounded-xl text-xl font-bold transition"
         >
-          Place Order
+          {placingOrder
+            ? "Placing Order..."
+            : "Place Order"}
         </button>
 
       </div>
 
     </div>
+
   );
+
 }
+
 
 export default CheckoutPage;
