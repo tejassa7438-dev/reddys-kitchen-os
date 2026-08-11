@@ -197,11 +197,8 @@ export const orderService = {
   // EXISTING ACTIVE SESSION:
   //     Add new batch to same order.
   //
-  // COMPLETED + PAID ORDER:
+  // COMPLETED ORDER:
   //     Create new order.
-  //
-  // COMPLETED + UNPAID ORDER:
-  //     Add new batch to the same order.
   //
   // =======================================
 
@@ -333,25 +330,37 @@ export const orderService = {
 
 
           // ---------------------------------
-          // FULLY CLOSED ORDER
-          // ---------------------------------
-          //
-          // Kitchen completion does not close
-          // the table while payment is pending.
-          // Only Completed + Paid is fully closed.
-          // A Completed + Unpaid order can receive
-          // another batch and remains the same order.
+          // COMPLETED ORDER
           // ---------------------------------
 
           if (
             existingOrder.status ===
-              "Completed" &&
-            existingOrder.paymentStatus ===
-              "Paid"
+            "Completed"
           ) {
 
             throw new Error(
               "ORDER_ALREADY_COMPLETED"
+            );
+
+          }
+
+          // ---------------------------------
+          // PAID ORDER
+          // ---------------------------------
+          //
+          // A paid order is financially closed.
+          // Never try to change Paid -> Unpaid.
+          // A later customer order must become
+          // a new order.
+          // ---------------------------------
+
+          if (
+            existingOrder.paymentStatus ===
+            "Paid"
+          ) {
+
+            throw new Error(
+              "ORDER_ALREADY_PAID"
             );
 
           }
@@ -514,7 +523,7 @@ export const orderService = {
     ) {
 
       // =====================================
-      // FULLY CLOSED / MISSING ORDER
+      // COMPLETED / MISSING ORDER
       // =====================================
 
       if (
@@ -522,6 +531,8 @@ export const orderService = {
         (
           error.message ===
             "ORDER_ALREADY_COMPLETED" ||
+          error.message ===
+            "ORDER_ALREADY_PAID" ||
           error.message ===
             "EXISTING_ORDER_NOT_FOUND"
         )
