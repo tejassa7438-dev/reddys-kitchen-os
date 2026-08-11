@@ -12,7 +12,10 @@ import {
   where,
 } from "firebase/firestore";
 
-import { db } from "./firebase";
+import {
+  db,
+  customerDb,
+} from "./firebase";
 
 import type {
   Order,
@@ -29,6 +32,12 @@ import type {
 const ordersCollection =
   collection(
     db,
+    "orders"
+  );
+
+const customerOrdersCollection =
+  collection(
+    customerDb,
     "orders"
   );
 
@@ -157,7 +166,7 @@ async function createOrder(
 
   const created =
     await addDoc(
-      ordersCollection,
+      customerOrdersCollection,
       orderData
     );
 
@@ -253,7 +262,7 @@ export const orderService = {
 
     const existingOrderRef =
       doc(
-        db,
+        customerDb,
         "orders",
         existingOrderId
       );
@@ -262,7 +271,7 @@ export const orderService = {
     try {
 
       await runTransaction(
-        db,
+        customerDb,
         async (
           transaction
         ) => {
@@ -600,7 +609,7 @@ export const orderService = {
 
     const orderRef =
       doc(
-        db,
+        customerDb,
         "orders",
         orderId
       );
