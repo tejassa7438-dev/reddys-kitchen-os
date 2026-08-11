@@ -1,7 +1,9 @@
 rules_version = '2';
 
 service cloud.firestore {
+
   match /databases/{database}/documents {
+
 
     // =========================================
     // AUTH HELPERS
@@ -11,11 +13,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+
     function customer() {
       return signedIn()
         && request.auth.token.firebase.sign_in_provider
           == "anonymous";
     }
+
 
     function staff() {
       return signedIn()
@@ -24,17 +28,21 @@ service cloud.firestore {
     }
 
 
+
     // =========================================
     // MENU
     // =========================================
 
     match /menu/{menuId} {
 
-      allow read: if true;
+      allow read:
+        if true;
 
       allow create, update, delete:
         if staff();
+
     }
+
 
 
     // =========================================
@@ -43,11 +51,14 @@ service cloud.firestore {
 
     match /categories/{categoryId} {
 
-      allow read: if true;
+      allow read:
+        if true;
 
       allow create, update, delete:
         if staff();
+
     }
+
 
 
     // =========================================
@@ -61,7 +72,9 @@ service cloud.firestore {
 
       allow create, update, delete:
         if staff();
+
     }
+
 
 
     // =========================================
@@ -70,12 +83,13 @@ service cloud.firestore {
 
     match /orders/{orderId} {
 
+
       // =======================================
       // READ ONE ORDER
       // =======================================
 
-      allow get: if
-        staff()
+      allow get:
+        if staff()
         ||
         (
           customer()
@@ -85,26 +99,25 @@ service cloud.firestore {
         );
 
 
+
       // =======================================
-      // LIST ALL ORDERS
+      // LIST ORDERS
       // =======================================
-      //
-      // Kitchen/Admin only.
-      //
-      // Customers can NEVER list all orders.
-      //
-      // =======================================
+
+      // Only kitchen/admin/staff can list
+      // all orders.
 
       allow list:
         if staff();
+
 
 
       // =======================================
       // CREATE ORDER
       // =======================================
 
-      allow create: if
-        customer()
+      allow create:
+        if customer()
 
         &&
 
@@ -118,17 +131,8 @@ service cloud.firestore {
 
         &&
 
-        request.resource.data.tableSessionId
-          .size() >= 20
-
-        &&
-
-        request.resource.data.tableSessionId
-          .size() <= 200
-
-        &&
-
-        request.resource.data.table is int
+        request.resource.data.table
+          is int
 
         &&
 
@@ -150,17 +154,8 @@ service cloud.firestore {
 
         &&
 
-        request.resource.data.paymentMethod ==
-          null
-
-        &&
-
-        request.resource.data.paidAt ==
-          null
-
-        &&
-
-        request.resource.data.items is list
+        request.resource.data.items
+          is list
 
         &&
 
@@ -168,7 +163,17 @@ service cloud.firestore {
 
         &&
 
+        request.resource.data.batches
+          is list
+
+        &&
+
+        request.resource.data.batches.size() > 0
+
+        &&
+
         request.resource.data.total >= 0;
+
 
 
       // =======================================
@@ -179,86 +184,50 @@ service cloud.firestore {
         if staff();
 
 
+
       // =======================================
-      // CUSTOMER APPEND / STACK ORDER
+      // CUSTOMER UPDATE
       // =======================================
       //
-      // Customer may update ONLY their own
-      // active unpaid order.
+      // Customer can modify their own unpaid
+      // order.
       //
-      // This is what allows:
-      //
-      // Pending   → Pending
-      // Preparing → Pending
-      // Ready     → Pending
-      //
-      // when the customer orders another item.
-      //
-      // Completed orders CANNOT be reopened.
+      // This is intentionally restricted.
       //
       // =======================================
 
-      allow update: if
-
-        customer()
-
-        // ---------------------------------------
-        // Existing order belongs to this customer
-        // ---------------------------------------
+      allow update:
+        if customer()
 
         &&
 
         resource.data.customerUid ==
           request.auth.uid
 
-        // ---------------------------------------
-        // Ownership cannot be changed
-        // ---------------------------------------
-
         &&
 
         request.resource.data.customerUid ==
           resource.data.customerUid
-
-        // ---------------------------------------
-        // Table cannot change
-        // ---------------------------------------
 
         &&
 
         request.resource.data.table ==
           resource.data.table
 
-        // ---------------------------------------
-        // Table session cannot change
-        // ---------------------------------------
-
         &&
 
         request.resource.data.tableSessionId ==
           resource.data.tableSessionId
-
-        // ---------------------------------------
-        // Existing order must still be unpaid
-        // ---------------------------------------
 
         &&
 
         resource.data.paymentStatus ==
           "Unpaid"
 
-        // ---------------------------------------
-        // New order must remain unpaid
-        // ---------------------------------------
-
         &&
 
         request.resource.data.paymentStatus ==
           "Unpaid"
-
-        // ---------------------------------------
-        // No customer payment details
-        // ---------------------------------------
 
         &&
 
@@ -270,9 +239,15 @@ service cloud.firestore {
         request.resource.data.paidAt ==
           null
 
-        // ---------------------------------------
-        // Customer may only modify these fields
-        // ---------------------------------------
+        &&
+
+        resource.data.status !=
+          "Completed"
+
+        &&
+
+        request.resource.data.status ==
+          "Pending"
 
         &&
 
@@ -286,35 +261,8 @@ service cloud.firestore {
           "customerName",
           "phone",
           "instructions"
-        ])
+        ]);
 
-        // ---------------------------------------
-        // IMPORTANT
-        //
-        // Adding another item always puts the
-        // order back into Pending.
-        //
-        // This allows:
-        //
-        // Pending   → Pending
-        // Preparing → Pending
-        // Ready     → Pending
-        //
-        // But NOT:
-        //
-        // Completed → Pending
-        //
-        // ---------------------------------------
-
-        &&
-
-        resource.data.status !=
-          "Completed"
-
-        &&
-
-        request.resource.data.status ==
-          "Pending";
 
 
       // =======================================
@@ -323,7 +271,9 @@ service cloud.firestore {
 
       allow delete:
         if staff();
+
     }
+
 
 
     // =========================================
@@ -331,8 +281,12 @@ service cloud.firestore {
     // =========================================
 
     match /{document=**} {
-      allow read, write: if false;
+
+      allow read, write:
+        if false;
+
     }
 
   }
-} 
+
+}

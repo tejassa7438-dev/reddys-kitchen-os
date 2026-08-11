@@ -12,10 +12,7 @@ import {
   where,
 } from "firebase/firestore";
 
-import {
-  db,
-  customerDb,
-} from "./firebase";
+import { db } from "./firebase";
 
 import type {
   Order,
@@ -32,12 +29,6 @@ import type {
 const ordersCollection =
   collection(
     db,
-    "orders"
-  );
-
-const customerOrdersCollection =
-  collection(
-    customerDb,
     "orders"
   );
 
@@ -103,6 +94,7 @@ function mergeOrderItems(
 
 
   return merged;
+
 }
 
 
@@ -120,6 +112,7 @@ async function createOrder(
    */
 
   const orderData = {
+
     table:
       order.table,
 
@@ -161,17 +154,19 @@ async function createOrder(
 
     createdAt:
       order.createdAt,
+
   };
 
 
   const created =
     await addDoc(
-      customerOrdersCollection,
+      ordersCollection,
       orderData
     );
 
 
   return created.id;
+
 }
 
 
@@ -262,7 +257,7 @@ export const orderService = {
 
     const existingOrderRef =
       doc(
-        customerDb,
+        db,
         "orders",
         existingOrderId
       );
@@ -271,7 +266,7 @@ export const orderService = {
     try {
 
       await runTransaction(
-        customerDb,
+        db,
         async (
           transaction
         ) => {
@@ -299,10 +294,12 @@ export const orderService = {
 
           const existingOrder =
             {
+
               ...(snapshot.data() as Order),
 
               id:
                 snapshot.id,
+
             };
 
 
@@ -353,6 +350,7 @@ export const orderService = {
 
           }
 
+
           // ---------------------------------
           // PAID ORDER
           // ---------------------------------
@@ -361,6 +359,7 @@ export const orderService = {
           // Never try to change Paid -> Unpaid.
           // A later customer order must become
           // a new order.
+          //
           // ---------------------------------
 
           if (
@@ -540,8 +539,10 @@ export const orderService = {
         (
           error.message ===
             "ORDER_ALREADY_COMPLETED" ||
+
           error.message ===
             "ORDER_ALREADY_PAID" ||
+
           error.message ===
             "EXISTING_ORDER_NOT_FOUND"
         )
@@ -609,7 +610,7 @@ export const orderService = {
 
     const orderRef =
       doc(
-        customerDb,
+        db,
         "orders",
         orderId
       );
@@ -1035,6 +1036,5 @@ export const orderService = {
     );
 
   },
-
 
 };

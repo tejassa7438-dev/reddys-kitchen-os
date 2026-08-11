@@ -9,29 +9,24 @@ import {
   useSearchParams,
 } from "react-router-dom";
 
+import {
+  signInAnonymously,
+  signOut,
+} from "firebase/auth";
+
 import FoodCard from "../../components/menu/FoodCard";
 import SearchBar from "../../components/menu/SearchBar";
 import CategoryTabs from "../../components/menu/CategoryTabs";
 import CartSummary from "../../components/cart/CartSummary";
 
 import { menuService } from "../../services/menuService";
+import { orderService } from "../../services/orderService";
 
-import {
-  customerAuth,
-  ensureCustomerAuth,
-} from "../../services/firebase";
+import { auth } from "../../services/firebase";
 
-import type {
-  MenuItem,
-} from "../../types/menu";
+import type { MenuItem } from "../../types/menu";
 
-import {
-  useTableStore,
-} from "../../store/tableStore";
-
-import {
-  orderService,
-} from "../../services/orderService";
+import { useTableStore } from "../../store/tableStore";
 
 
 function MenuPage() {
@@ -39,9 +34,9 @@ function MenuPage() {
   const navigate =
     useNavigate();
 
-  const [
-    searchParams,
-  ] = useSearchParams();
+
+  const [searchParams] =
+    useSearchParams();
 
 
   // =========================================
@@ -53,6 +48,7 @@ function MenuPage() {
       (state) =>
         state.table
     );
+
 
   const setTable =
     useTableStore(
@@ -68,12 +64,15 @@ function MenuPage() {
   const [
     customerAuthReady,
     setCustomerAuthReady,
-  ] = useState(false);
+  ] =
+    useState(false);
+
 
   const [
     customerAuthError,
     setCustomerAuthError,
-  ] = useState("");
+  ] =
+    useState("");
 
 
   // =========================================
@@ -83,34 +82,44 @@ function MenuPage() {
   const [
     items,
     setItems,
-  ] = useState<MenuItem[]>([]);
+  ] =
+    useState<MenuItem[]>(
+      []
+    );
+
 
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] =
+    useState(true);
+
 
   const [
     search,
     setSearch,
-  ] = useState("");
+  ] =
+    useState("");
+
 
   const [
     selectedCategory,
     setSelectedCategory,
-  ] = useState("All");
+  ] =
+    useState("All");
 
 
   // =========================================
-  // ACTIVE ORDER
+  // ACTIVE ORDER STATE
   // =========================================
 
   const [
     activeOrderId,
     setActiveOrderId,
-  ] = useState<string | null>(
-    null
-  );
+  ] =
+    useState<string | null>(
+      null
+    );
 
 
   // =========================================
@@ -119,8 +128,7 @@ function MenuPage() {
 
   useEffect(() => {
 
-    let cancelled =
-      false;
+    let cancelled = false;
 
 
     const initializeCustomerAuth =
@@ -128,24 +136,60 @@ function MenuPage() {
 
         try {
 
-          setCustomerAuthError("");
+          setCustomerAuthError(
+            ""
+          );
 
 
-          const uid =
-            await ensureCustomerAuth();
+          const currentUser =
+            auth.currentUser;
 
+
+          // -----------------------------------
+          // Already anonymous customer
+          // -----------------------------------
 
           if (
-            !uid ||
-            !customerAuth.currentUser ||
-            !customerAuth.currentUser.isAnonymous
+            currentUser &&
+            currentUser.isAnonymous
           ) {
 
-            throw new Error(
-              "Customer authentication failed."
+            if (!cancelled) {
+
+              setCustomerAuthReady(
+                true
+              );
+
+            }
+
+            return;
+
+          }
+
+
+          // -----------------------------------
+          // Staff account is currently signed in
+          // -----------------------------------
+
+          if (
+            currentUser &&
+            !currentUser.isAnonymous
+          ) {
+
+            await signOut(
+              auth
             );
 
           }
+
+
+          // -----------------------------------
+          // Create anonymous customer session
+          // -----------------------------------
+
+          await signInAnonymously(
+            auth
+          );
 
 
           if (!cancelled) {
@@ -156,7 +200,9 @@ function MenuPage() {
 
           }
 
-        } catch (error) {
+        } catch (
+          error
+        ) {
 
           console.error(
             "Customer authentication error:",
@@ -169,6 +215,7 @@ function MenuPage() {
             setCustomerAuthReady(
               false
             );
+
 
             setCustomerAuthError(
               "Unable to start your customer session. Please reload the menu."
@@ -186,8 +233,7 @@ function MenuPage() {
 
     return () => {
 
-      cancelled =
-        true;
+      cancelled = true;
 
     };
 
@@ -207,7 +253,9 @@ function MenuPage() {
 
 
     if (!tableParam) {
+
       return;
+
     }
 
 
@@ -248,6 +296,7 @@ function MenuPage() {
             data
           );
 
+
           setLoading(
             false
           );
@@ -267,8 +316,12 @@ function MenuPage() {
 
   useEffect(() => {
 
-    if (!customerAuthReady) {
+    if (
+      !customerAuthReady
+    ) {
+
       return;
+
     }
 
 
@@ -294,7 +347,7 @@ function MenuPage() {
 
 
     // -----------------------------------------
-    // No stored active order
+    // No active order
     // -----------------------------------------
 
     if (!storedOrderId) {
@@ -309,7 +362,7 @@ function MenuPage() {
 
 
     // -----------------------------------------
-    // Show button immediately
+    // Show current order immediately
     // -----------------------------------------
 
     setActiveOrderId(
@@ -318,12 +371,13 @@ function MenuPage() {
 
 
     // -----------------------------------------
-    // Subscribe to current order
+    // Listen to Firestore order
     // -----------------------------------------
 
     const unsubscribe =
       orderService.subscribeToOrder(
         storedOrderId,
+
         (order) => {
 
           // -----------------------------------
@@ -361,29 +415,12 @@ function MenuPage() {
 
 
           // -----------------------------------
-          // IMPORTANT:
-          //
-          // Kitchen "Completed" does NOT mean
-          // customer payment is completed.
-          //
-          // Keep the Current Order button
-          // visible until BOTH conditions are
-          // true:
-          //
-          // status       = Completed
-          // paymentStatus = Paid
-          //
+          // ORDER COMPLETED
           // -----------------------------------
 
-          const fullyFinished =
-            order.status ===
-              "Completed" &&
-            order.paymentStatus ===
-              "Paid";
-
-
           if (
-            fullyFinished
+            order.status ===
+            "Completed"
           ) {
 
             localStorage.removeItem(
@@ -415,15 +452,7 @@ function MenuPage() {
 
 
           // -----------------------------------
-          // STILL ACTIVE
-          //
-          // Includes:
-          //
-          // Pending
-          // Preparing
-          // Ready
-          // Completed + Unpaid
-          //
+          // ORDER STILL ACTIVE
           // -----------------------------------
 
           setActiveOrderId(
@@ -572,9 +601,7 @@ function MenuPage() {
   // LOADING MENU
   // =========================================
 
-  if (
-    loading
-  ) {
+  if (loading) {
 
     return (
 
@@ -622,8 +649,6 @@ function MenuPage() {
         <div className="max-w-6xl mx-auto px-5 py-6">
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-
-            {/* Restaurant Name */}
 
             <div>
 
@@ -679,7 +704,7 @@ function MenuPage() {
 
       <div className="max-w-6xl mx-auto px-5 py-6">
 
-        {/* Search */}
+        {/* SEARCH */}
 
         <div className="mt-8">
 
@@ -695,7 +720,7 @@ function MenuPage() {
         </div>
 
 
-        {/* Categories */}
+        {/* CATEGORIES */}
 
         <div className="mt-6">
 
@@ -766,9 +791,9 @@ function MenuPage() {
       </div>
 
 
-      {/* ================================= */}
+      {/* =================================== */}
       {/* FLOATING CART */}
-      {/* ================================= */}
+      {/* =================================== */}
 
       <CartSummary />
 

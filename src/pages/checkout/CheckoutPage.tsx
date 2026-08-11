@@ -8,11 +8,6 @@ import {
 } from "react-router-dom";
 
 import {
-  customerAuth,
-  ensureCustomerAuth,
-} from "../../services/firebase";
-
-import {
   useCartStore,
 } from "../../store/cartStore";
 
@@ -23,6 +18,11 @@ import {
 import {
   orderService,
 } from "../../services/orderService";
+
+import {
+  auth,
+  ensureCustomerAuth,
+} from "../../services/firebase";
 
 import type {
   Order,
@@ -107,10 +107,6 @@ function CheckoutPage() {
   const placeOrder =
     async () => {
 
-      // ---------------------------------------
-      // Empty cart
-      // ---------------------------------------
-
       if (
         items.length === 0
       ) {
@@ -124,47 +120,6 @@ function CheckoutPage() {
       }
 
 
-      // ---------------------------------------
-      // Table check
-      // ---------------------------------------
-
-      if (
-        !Number.isInteger(table) ||
-        table < 1
-      ) {
-
-        alert(
-          "Table information is missing. Please reload the menu."
-        );
-
-        return;
-
-      }
-
-
-      // ---------------------------------------
-      // Table session check
-      // ---------------------------------------
-
-      if (
-        !tableSessionId ||
-        typeof tableSessionId !==
-          "string"
-      ) {
-
-        alert(
-          "Table session not found. Please reload the menu."
-        );
-
-        return;
-
-      }
-
-
-      // ---------------------------------------
-      // Customer name
-      // ---------------------------------------
-
       if (
         !customerName.trim()
       ) {
@@ -177,10 +132,6 @@ function CheckoutPage() {
 
       }
 
-
-      // ---------------------------------------
-      // Prevent double click
-      // ---------------------------------------
 
       if (
         placingOrder
@@ -199,56 +150,68 @@ function CheckoutPage() {
       try {
 
         // =====================================
-        // ENSURE CUSTOMER AUTH
-        // =====================================
-        //
-        // IMPORTANT:
-        // This uses customerAuth, NOT staff auth.
-        //
-        // This means opening the customer menu
-        // will NOT log the kitchen/admin account
-        // out.
-        //
+        // ENSURE CUSTOMER AUTHENTICATION
         // =====================================
 
-        const customerUid =
-          await ensureCustomerAuth();
+        await ensureCustomerAuth();
 
+
+        // =====================================
+        // GET THE CURRENT AUTHENTICATED USER
+        // =====================================
 
         const currentUser =
-          customerAuth.currentUser;
+          auth.currentUser;
 
 
         if (
-          !currentUser ||
+          !currentUser
+        ) {
+
+          throw new Error(
+            "Customer session could not be found. Please reload the menu."
+          );
+
+        }
+
+
+        // =====================================
+        // CUSTOMER MUST BE ANONYMOUS
+        // =====================================
+
+        if (
           !currentUser.isAnonymous
         ) {
 
           throw new Error(
-            "Customer session could not be established."
+            "Invalid customer session. Please reload the menu."
           );
 
         }
 
 
         // =====================================
-        // VERIFY UID
+        // THIS IS THE ONLY UID USED FOR ORDER
         // =====================================
 
-        if (
-          currentUser.uid !==
+        const customerUid =
+          currentUser.uid;
+
+
+        console.log(
+          "CURRENT CUSTOMER UID:",
           customerUid
-        ) {
+        );
 
-          throw new Error(
-            "Customer authentication changed. Please reload the menu."
-          );
 
-        }
+        console.log(
+          "AUTH ANONYMOUS:",
+          currentUser.isAnonymous
+        );
 
 
         // =====================================
-        // CONVERT CART ITEMS
+        // CREATE ORDER ITEMS
         // =====================================
 
         const orderItems:
@@ -257,9 +220,7 @@ function CheckoutPage() {
             (item) => ({
 
               id:
-                String(
-                  item.id
-                ),
+                String(item.id),
 
               name:
                 item.name,
@@ -275,17 +236,13 @@ function CheckoutPage() {
 
 
         // =====================================
-        // CREATED TIME
+        // CREATE BATCH
         // =====================================
 
         const createdAt =
           new Date()
             .toISOString();
 
-
-        // =====================================
-        // NEW BATCH
-        // =====================================
 
         const batch = {
 
@@ -304,98 +261,91 @@ function CheckoutPage() {
 
 
         // =====================================
-        // BUILD ORDER
+        // CREATE ORDER
         // =====================================
 
         const order:
           Order = {
 
-            id:
-              Date.now()
-                .toString(),
+          id:
+            Date.now().toString(),
 
-            table,
+          table,
 
-            tableSessionId,
+          tableSessionId,
 
-            customerUid,
+          customerUid,
 
-            customerName:
-              customerName.trim(),
+          customerName:
+            customerName.trim(),
 
-            phone:
-              phone.trim(),
+          phone:
+            phone.trim(),
 
-            instructions:
-              instructions.trim(),
+          instructions:
+            instructions.trim(),
 
-            items:
-              orderItems,
+          items:
+            orderItems,
 
-            batches:
-              [batch],
+          batches:
+            [batch],
 
-            total,
+          total,
 
-            status:
-              "Pending",
+          status:
+            "Pending",
 
-            paymentStatus:
-              "Unpaid",
+          paymentStatus:
+            "Unpaid",
 
-            paymentMethod:
-              null,
+          paymentMethod:
+            null,
 
-            paidAt:
-              null,
+          paidAt:
+            null,
 
-            createdAt,
+          createdAt,
 
-          };
+        };
+
+
+        // =====================================
+        // FINAL DEBUG
+        // =====================================
+
+        console.log(
+          "PLACING ORDER CUSTOMER UID:",
+          order.customerUid
+        );
 
 
         console.log(
-          "Placing customer order:",
-          order
+          "CURRENT FIREBASE UID:",
+          auth.currentUser?.uid
         );
 
 
         // =====================================
-        // CREATE OR APPEND
+        // SAFETY CHECK
         // =====================================
-        console.log(
-  "========== CUSTOMER ORDER DEBUG =========="
-);
 
-console.log(
-  "Current customer UID:",
-  customerAuth.currentUser?.uid
-);
+        if (
+          order.customerUid !==
+          auth.currentUser?.uid
+        ) {
 
-console.log(
-  "Order customer UID:",
-  order.customerUid
-);
+          throw new Error(
+            "Customer authentication changed while placing the order. Please try again."
+          );
 
-console.log(
-  "Same UID?:",
-  customerAuth.currentUser?.uid ===
-    order.customerUid
-);
+        }
 
-console.log(
-  "Table:",
-  order.table
-);
 
-console.log(
-  "Table session:",
-  order.tableSessionId
-);
+        // =====================================
+        // PLACE ORDER
+        // =====================================
 
-console.log(
-  "=========================================="
-);
         const orderId =
           await orderService.placeOrder(
             order
@@ -403,7 +353,7 @@ console.log(
 
 
         // =====================================
-        // REMEMBER ACTIVE ORDER
+        // SAVE ACTIVE ORDER
         // =====================================
 
         localStorage.setItem(
@@ -426,7 +376,7 @@ console.log(
 
 
         // =====================================
-        // GO TO TRACKING
+        // OPEN TRACKING
         // =====================================
 
         navigate(
@@ -436,12 +386,13 @@ console.log(
           }
         );
 
+
       } catch (
         error
       ) {
 
         console.error(
-          "Customer order error:",
+          "Firebase Error:",
           error
         );
 
@@ -450,56 +401,9 @@ console.log(
           error instanceof Error
         ) {
 
-          switch (
+          alert(
             error.message
-          ) {
-
-            case "ORDER_OWNER_MISMATCH":
-
-              alert(
-                "This order belongs to another customer session. Please reload the menu."
-              );
-
-              break;
-
-
-            case "TABLE_SESSION_MISMATCH":
-
-              alert(
-                "This table session has changed. Please reload the menu."
-              );
-
-              break;
-
-
-            case "ORDER_ALREADY_COMPLETED":
-
-              alert(
-                "That order has already been completed. A new order will be created."
-              );
-
-              break;
-
-
-            case "EXISTING_ORDER_NOT_FOUND":
-
-              alert(
-                "The previous order could not be found. Please try again."
-              );
-
-              break;
-
-
-            default:
-
-              alert(
-                error.message ||
-                "Unable to place your order. Please try again."
-              );
-
-              break;
-
-          }
+          );
 
         } else {
 
@@ -530,10 +434,6 @@ console.log(
 
       <div className="max-w-3xl mx-auto">
 
-        {/* ================================= */}
-        {/* BACK */}
-        {/* ================================= */}
-
         <button
           type="button"
           onClick={() =>
@@ -545,10 +445,6 @@ console.log(
         </button>
 
 
-        {/* ================================= */}
-        {/* HEADER */}
-        {/* ================================= */}
-
         <h1 className="text-4xl font-bold text-red-600">
           Checkout
         </h1>
@@ -559,68 +455,106 @@ console.log(
         </p>
 
 
-        {/* ================================= */}
         {/* CUSTOMER DETAILS */}
-        {/* ================================= */}
 
         <div className="mt-8 space-y-5">
 
-          <input
-            type="text"
-            placeholder="Customer Name"
-            value={
-              customerName
-            }
-            onChange={(
-              event
-            ) =>
-              setCustomerName(
-                event.target.value
-              )
-            }
-            className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
-          />
+          <div>
+
+            <label className="block text-sm font-semibold text-gray-300 mb-2">
+              Customer Name
+            </label>
 
 
-          <input
-            type="tel"
-            placeholder="Phone Number (Optional)"
-            value={
-              phone
-            }
-            onChange={(
-              event
-            ) =>
-              setPhone(
-                event.target.value
-              )
-            }
-            className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
-          />
+            <input
+              type="text"
+              placeholder="Enter your name"
+              value={
+                customerName
+              }
+              onChange={(event) =>
+                setCustomerName(
+                  event.target.value
+                )
+              }
+              disabled={
+                placingOrder
+              }
+              className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
+            />
+
+          </div>
 
 
-          <textarea
-            rows={4}
-            placeholder="Special Instructions (Optional)"
-            value={
-              instructions
-            }
-            onChange={(
-              event
-            ) =>
-              setInstructions(
-                event.target.value
-              )
-            }
-            className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
-          />
+          <div>
+
+            <label className="block text-sm font-semibold text-gray-300 mb-2">
+
+              Phone Number
+
+              <span className="text-gray-500 ml-2">
+                Optional
+              </span>
+
+            </label>
+
+
+            <input
+              type="tel"
+              placeholder="Enter phone number"
+              value={
+                phone
+              }
+              onChange={(event) =>
+                setPhone(
+                  event.target.value
+                )
+              }
+              disabled={
+                placingOrder
+              }
+              className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500"
+            />
+
+          </div>
+
+
+          <div>
+
+            <label className="block text-sm font-semibold text-gray-300 mb-2">
+
+              Special Instructions
+
+              <span className="text-gray-500 ml-2">
+                Optional
+              </span>
+
+            </label>
+
+
+            <textarea
+              rows={4}
+              placeholder="Any special requests for your order?"
+              value={
+                instructions
+              }
+              onChange={(event) =>
+                setInstructions(
+                  event.target.value
+                )
+              }
+              disabled={
+                placingOrder
+              }
+              className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-700 outline-none focus:border-red-500 resize-none"
+            />
+
+          </div>
 
         </div>
 
 
-        {/* ================================= */}
         {/* ORDER SUMMARY */}
-        {/* ================================= */}
 
         <div className="mt-10 bg-zinc-900 rounded-2xl p-6">
 
@@ -687,9 +621,7 @@ console.log(
         </div>
 
 
-        {/* ================================= */}
         {/* PLACE ORDER */}
-        {/* ================================= */}
 
         <button
           type="button"
@@ -702,10 +634,17 @@ console.log(
           }
           className="w-full mt-8 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-4 rounded-xl text-xl font-bold transition"
         >
+
           {placingOrder
             ? "Placing Order..."
             : "Place Order"}
+
         </button>
+
+
+        <p className="text-center text-gray-500 text-sm mt-4">
+          Payment will be handled after your order is served.
+        </p>
 
       </div>
 
