@@ -16,6 +16,8 @@ import AdminLayout from "../../components/admin/AdminLayout";
 import Loading from "../../components/ui/Loading";
 
 import { orderService } from "../../services/orderService";
+import { db } from "../../services/firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 import type { Order } from "../../types/order";
 
@@ -33,6 +35,52 @@ type TableInfo = {
   order: Order | null;
 };
 
+
+// =========================================
+// TABLE QR TOKENS
+// =========================================
+// These tokens match the 12 printed QR codes.
+// Do not change them after printing the QRs.
+// =========================================
+
+const TABLE_QR_TOKENS: Record<number, string> = {
+  1: "rJIp8m7uWIKOBh3hISI_N7VMcCV7tBgvERjxIYtACHY",
+  2: "XsMQpn9JjlrrU-bO4Si5BTMcvcfNr3sF1-ZEudAG8f0",
+  3: "IgC6S4InxhwK-ywX4DWLU1tX5eyo3B6cQX7FjUEQGbY",
+  4: "nKUPDRZlJoLTwq96EUgxDPrXQYMAGuVqo4uYWbU66i4",
+  5: "nUFUE109kLhOGJuScIauyxF179ACuMLwU-rxqpXbF4w",
+  6: "CkQLbgCTOisc-VmsZXmauwfRFoNzkM1DckWZY1fomgg",
+  7: "qX3cE77XSPweTSjnJcLheP-NVtLgFwQm7xHlnGdvFh0",
+  8: "QCqXAhKlu1nQ7C3zj6lyk9Qf3qdwDJpRvbr9Kkd_SvM",
+  9: "FkTaWPTut6PC4ZiQz4J-nOnEbKR8Ogy8DTsiyVZi8LI",
+  10: "olMfOahQk8L51EkTjKO_eOjWjtgw8oAWoNYFbu--JZ8",
+  11: "mjb9AJ0o0YhlpDMDg57tKTIQ9mIQAusBe2CCPgilKx8",
+  12: "sAMKDvNuMorgPBC9uJdYk4egFNwB9hfR_r9bQaYAyGQ",
+};
+
+async function initializeTableQrSessions(): Promise<void> {
+  const writes = Array.from(
+    { length: 12 },
+    (_, index) => {
+      const table = index + 1;
+      const token = TABLE_QR_TOKENS[table];
+
+      return setDoc(
+        doc(db, "tableSessions", token),
+        {
+          table,
+          active: true,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    }
+  );
+
+  await Promise.all(writes);
+}
+
+
 function TableManagement() {
   const navigate =
     useNavigate();
@@ -45,6 +93,23 @@ function TableManagement() {
 
   const [clearingTable, setClearingTable] =
     useState<number | null>(null);
+
+  // =========================================
+  // REGISTER TABLE QR SESSIONS
+  // =========================================
+
+  useEffect(() => {
+    initializeTableQrSessions().catch((error) => {
+      console.error(
+        "Table QR session initialization error:",
+        error
+      );
+
+      toast.error(
+        "Could not register table QR sessions."
+      );
+    });
+  }, []);
 
   // =========================================
   // TABLE COUNT
@@ -385,7 +450,9 @@ function TableManagement() {
 
     const confirmed =
       window.confirm(
-        `Clear Table ${tableNumber}?\n\nThis will complete the paid order and make the table available.`
+        `Clear Table ${tableNumber}?
+
+This will complete the paid order and make the table available.`
       );
 
     if (!confirmed) {
