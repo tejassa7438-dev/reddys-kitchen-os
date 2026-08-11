@@ -18,14 +18,6 @@ import {
   orderService,
 } from "../../services/orderService";
 
-import {
-  menuService,
-} from "../../services/menuService";
-
-import type {
-  MenuItem,
-} from "../../types/menu";
-
 
 function KitchenPage() {
 
@@ -34,13 +26,6 @@ function KitchenPage() {
     setOrders,
   ] =
     useState<Order[]>([]);
-
-
-  const [
-    menu,
-    setMenu,
-  ] =
-    useState<MenuItem[]>([]);
 
 
   const [
@@ -130,24 +115,12 @@ function KitchenPage() {
 
 
   // =========================================
-  // FIRESTORE SUBSCRIPTIONS
+  // FIRESTORE ORDER SUBSCRIPTION
   // =========================================
 
   useEffect(() => {
 
-    const unsubMenu =
-      menuService.subscribe(
-        (items) => {
-
-          setMenu(
-            items
-          );
-
-        }
-      );
-
-
-    const unsubOrders =
+    const unsubscribe =
       orderService.subscribeToOrders(
         (items) => {
 
@@ -311,9 +284,7 @@ function KitchenPage() {
 
     return () => {
 
-      unsubMenu();
-
-      unsubOrders();
+      unsubscribe();
 
       stopOrderSound();
 
@@ -747,6 +718,7 @@ function KitchenPage() {
                               "Pending" && (
 
                               <button
+                                type="button"
                                 onClick={() => {
 
                                   if (
@@ -782,6 +754,7 @@ function KitchenPage() {
                               "Preparing" && (
 
                               <button
+                                type="button"
                                 onClick={() =>
                                   handleBatchStatusChange(
                                     order.id,
@@ -795,18 +768,6 @@ function KitchenPage() {
                               </button>
 
                             )}
-
-                            {/* 
-                              IMPORTANT:
-                              There is intentionally NO
-                              Complete button here.
-
-                              Kitchen staff can only:
-                              Pending → Preparing → Ready
-
-                              Billing/Admin handles the
-                              payment and table completion.
-                            */}
 
                           </div>
 
