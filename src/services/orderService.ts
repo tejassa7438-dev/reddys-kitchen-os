@@ -12,10 +12,7 @@ import {
   where,
 } from "firebase/firestore";
 
-import {
-  db,
-  customerDb,
-} from "./firebase";
+import { db } from "./firebase";
 
 import type {
   Order,
@@ -26,23 +23,12 @@ import type {
 
 
 // =========================================
-// STAFF ORDERS COLLECTION
+// ORDERS COLLECTION
 // =========================================
 
 const ordersCollection =
   collection(
     db,
-    "orders"
-  );
-
-
-// =========================================
-// CUSTOMER ORDERS COLLECTION
-// =========================================
-
-const customerOrdersCollection =
-  collection(
-    customerDb,
     "orders"
   );
 
@@ -112,15 +98,19 @@ function mergeOrderItems(
 
 
 // =========================================
-// CREATE CUSTOMER ORDER
+// CREATE ORDER
 // =========================================
 
 async function createOrder(
   order: Order
 ): Promise<string> {
 
-  const orderData = {
+  /*
+   * Do not store the local temporary ID.
+   * Firestore generates the real document ID.
+   */
 
+  const orderData = {
     table:
       order.table,
 
@@ -162,13 +152,12 @@ async function createOrder(
 
     createdAt:
       order.createdAt,
-
   };
 
 
   const created =
     await addDoc(
-      customerOrdersCollection,
+      ordersCollection,
       orderData
     );
 
@@ -182,7 +171,6 @@ async function createOrder(
 // =========================================
 
 export const orderService = {
-
 
   // =======================================
   // CREATE ORDER
@@ -203,14 +191,17 @@ export const orderService = {
   // PLACE ORDER
   // =======================================
   //
-  // No existing active order:
-  //     Create a new order.
+  // NEW ACTIVE SESSION:
+  //     Create new order.
   //
-  // Existing active order:
-  //     Add a new batch to that order.
+  // EXISTING ACTIVE SESSION:
+  //     Add new batch to same order.
   //
-  // Completed order:
-  //     Create a new order.
+  // COMPLETED + PAID ORDER:
+  //     Create new order.
+  //
+  // COMPLETED + UNPAID ORDER:
+  //     Add new batch to the same order.
   //
   // =======================================
 
@@ -265,7 +256,7 @@ export const orderService = {
 
     const existingOrderRef =
       doc(
-        customerDb,
+        db,
         "orders",
         existingOrderId
       );
@@ -274,7 +265,7 @@ export const orderService = {
     try {
 
       await runTransaction(
-        customerDb,
+        db,
         async (
           transaction
         ) => {
@@ -342,12 +333,21 @@ export const orderService = {
 
 
           // ---------------------------------
-          // COMPLETED ORDER
+          // FULLY CLOSED ORDER
+          // ---------------------------------
+          //
+          // Kitchen completion does not close
+          // the table while payment is pending.
+          // Only Completed + Paid is fully closed.
+          // A Completed + Unpaid order can receive
+          // another batch and remains the same order.
           // ---------------------------------
 
           if (
             existingOrder.status ===
-            "Completed"
+              "Completed" &&
+            existingOrder.paymentStatus ===
+              "Paid"
           ) {
 
             throw new Error(
@@ -514,7 +514,7 @@ export const orderService = {
     ) {
 
       // =====================================
-      // EXISTING ORDER MISSING / COMPLETED
+      // FULLY CLOSED / MISSING ORDER
       // =====================================
 
       if (
@@ -522,7 +522,6 @@ export const orderService = {
         (
           error.message ===
             "ORDER_ALREADY_COMPLETED" ||
-
           error.message ===
             "EXISTING_ORDER_NOT_FOUND"
         )
@@ -578,13 +577,7 @@ export const orderService = {
 
 
   // =======================================
-  // CUSTOMER: SUBSCRIBE TO ONE ORDER
-  // =======================================
-  //
-  // Used by the customer Menu/Tracking pages.
-  //
-  // Uses customerDb.
-  //
+  // SUBSCRIBE TO ONE ORDER
   // =======================================
 
   subscribeToOrder(
@@ -596,7 +589,7 @@ export const orderService = {
 
     const orderRef =
       doc(
-        customerDb,
+        db,
         "orders",
         orderId
       );
@@ -634,7 +627,7 @@ export const orderService = {
       (error) => {
 
         console.error(
-          "Customer order subscription error:",
+          "Order subscription error:",
           error
         );
 
@@ -650,13 +643,7 @@ export const orderService = {
 
 
   // =======================================
-  // STAFF: SUBSCRIBE TO ALL ORDERS
-  // =======================================
-  //
-  // Kitchen/Admin only.
-  //
-  // Uses staff db.
-  //
+  // SUBSCRIBE TO ALL ORDERS
   // =======================================
 
   subscribeToOrders(
@@ -668,7 +655,6 @@ export const orderService = {
     const ordersQuery =
       query(
         ordersCollection,
-
         orderBy(
           "createdAt",
           "desc"
@@ -703,7 +689,7 @@ export const orderService = {
       (error) => {
 
         console.error(
-          "Staff orders subscription error:",
+          "Orders subscription error:",
           error
         );
 
@@ -719,7 +705,7 @@ export const orderService = {
 
 
   // =======================================
-  // STAFF: UPDATE ORDER STATUS
+  // UPDATE ORDER STATUS
   // =======================================
 
   async updateOrderStatus(
@@ -746,7 +732,7 @@ export const orderService = {
 
 
   // =======================================
-  // STAFF: MARK ORDER PAID
+  // MARK ORDER PAID
   // =======================================
 
   async markOrderPaid(
@@ -786,7 +772,7 @@ export const orderService = {
 
 
   // =======================================
-  // STAFF: MARK ORDER UNPAID
+  // MARK ORDER UNPAID
   // =======================================
 
   async markOrderUnpaid(
@@ -821,7 +807,16 @@ export const orderService = {
 
 
   // =======================================
-  // STAFF: CLEAR TABLE
+  // CLEAR TABLE
+  // =======================================
+  //
+  // Finds the latest active order for the
+  // specified table.
+  //
+  // The order must already be Paid.
+  //
+  // Then marks it Completed.
+  //
   // =======================================
 
   async clearTable(
@@ -858,12 +853,11 @@ export const orderService = {
 
 
     // ---------------------------------------
-    // Find latest active order
+    // Find latest non-completed order
     // ---------------------------------------
 
     const activeOrders =
       snapshot.docs
-
         .map(
           (snapshotDoc) => ({
 
@@ -874,13 +868,11 @@ export const orderService = {
 
           })
         )
-
         .filter(
           (order) =>
             order.status !==
             "Completed"
         )
-
         .sort(
           (a, b) =>
             new Date(
@@ -908,7 +900,7 @@ export const orderService = {
 
 
     // ---------------------------------------
-    // Payment required
+    // Payment must be completed first
     // ---------------------------------------
 
     if (
@@ -947,7 +939,9 @@ export const orderService = {
 
 
     // ---------------------------------------
-    // Clear local active order
+    // Remove stale local active-order keys
+    // if this browser happens to be using
+    // the same table.
     // ---------------------------------------
 
     const storageKey =
@@ -980,7 +974,7 @@ export const orderService = {
 
 
   // =======================================
-  // STAFF: DELETE ORDER
+  // DELETE ORDER
   // =======================================
 
   async deleteOrder(
@@ -1005,6 +999,10 @@ export const orderService = {
   // =======================================
   // LEGACY STATUS METHOD
   // =======================================
+  //
+  // Kept for older Admin/Kitchen code.
+  //
+  // =======================================
 
   async updateStatus(
     orderId: string,
@@ -1017,5 +1015,6 @@ export const orderService = {
     );
 
   },
+
 
 };
