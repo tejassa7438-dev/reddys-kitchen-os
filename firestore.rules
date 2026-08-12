@@ -4,7 +4,6 @@ service cloud.firestore {
 
   match /databases/{database}/documents {
 
-
     // =========================================
     // AUTH HELPERS
     // =========================================
@@ -13,20 +12,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-
     function customer() {
       return signedIn()
         && request.auth.token.firebase.sign_in_provider
           == "anonymous";
     }
 
-
     function staff() {
       return signedIn()
         && request.auth.token.firebase.sign_in_provider
           != "anonymous";
     }
-
 
 
     // =========================================
@@ -40,9 +36,7 @@ service cloud.firestore {
 
       allow create, update, delete:
         if staff();
-
     }
-
 
 
     // =========================================
@@ -56,9 +50,7 @@ service cloud.firestore {
 
       allow create, update, delete:
         if staff();
-
     }
-
 
 
     // =========================================
@@ -72,9 +64,47 @@ service cloud.firestore {
 
       allow create, update, delete:
         if staff();
-
     }
 
+
+    // =========================================
+    // TABLE SESSIONS
+    // =========================================
+    //
+    // QR session documents are trusted by
+    // Firestore rules.
+    //
+    // The document ID is the QR session token.
+    //
+    // Example:
+    //
+    // tableSessions/TABLE_1_TOKEN
+    //
+    // {
+    //   table: 1,
+    //   active: true
+    // }
+    //
+    // Customers cannot modify these documents.
+    //
+    // =========================================
+
+    match /tableSessions/{sessionId} {
+
+      allow read, write:
+        if staff();
+    }
+
+
+    // =========================================
+    // TABLE STATE
+    // =========================================
+
+    match /tableState/{tableId} {
+
+      allow read, create, update, delete:
+        if staff();
+    }
 
 
     // =========================================
@@ -99,35 +129,46 @@ service cloud.firestore {
         );
 
 
-
       // =======================================
       // LIST ORDERS
       // =======================================
-
-      // Only kitchen/admin/staff can list
-      // all orders.
 
       allow list:
         if staff();
 
 
-
       // =======================================
       // CREATE ORDER
+      // =======================================
+      //
+      // CUSTOMER MUST:
+      //
+      // 1. Be anonymous-authenticated
+      // 2. Own the order
+      // 3. Provide a valid table
+      // 4. Provide a valid QR session
+      // 5. QR session must exist
+      // 6. QR session must be active
+      // 7. QR session must belong to
+      //    the exact submitted table
+      //
       // =======================================
 
       allow create:
         if customer()
+
+        // -------------------------------------
+        // CUSTOMER OWNERSHIP
+        // -------------------------------------
 
         &&
 
         request.resource.data.customerUid ==
           request.auth.uid
 
-        &&
-
-        request.resource.data.tableSessionId
-          is string
+        // -------------------------------------
+        // TABLE NUMBER
+        // -------------------------------------
 
         &&
 
@@ -142,6 +183,53 @@ service cloud.firestore {
 
         request.resource.data.table <= 12
 
+        // -------------------------------------
+        // TABLE SESSION ID
+        // -------------------------------------
+
+        &&
+
+        request.resource.data.tableSessionId
+          is string
+
+        // -------------------------------------
+        // SESSION MUST EXIST
+        // -------------------------------------
+
+        &&
+
+        exists(
+          /databases/$(database)/documents/tableSessions/$(request.resource.data.tableSessionId)
+        )
+
+        // -------------------------------------
+        // SESSION MUST BE ACTIVE
+        // -------------------------------------
+
+        &&
+
+        get(
+          /databases/$(database)/documents/tableSessions/$(request.resource.data.tableSessionId)
+        ).data.active == true
+
+        // -------------------------------------
+        // CRITICAL SECURITY CHECK
+        //
+        // SESSION TABLE MUST MATCH
+        // ORDER TABLE
+        // -------------------------------------
+
+        &&
+
+        get(
+          /databases/$(database)/documents/tableSessions/$(request.resource.data.tableSessionId)
+        ).data.table ==
+          request.resource.data.table
+
+        // -------------------------------------
+        // INITIAL ORDER STATE
+        // -------------------------------------
+
         &&
 
         request.resource.data.status ==
@@ -151,6 +239,10 @@ service cloud.firestore {
 
         request.resource.data.paymentStatus ==
           "Unpaid"
+
+        // -------------------------------------
+        // ORDER CONTENT
+        // -------------------------------------
 
         &&
 
@@ -175,7 +267,6 @@ service cloud.firestore {
         request.resource.data.total >= 0;
 
 
-
       // =======================================
       // STAFF UPDATE
       // =======================================
@@ -184,16 +275,8 @@ service cloud.firestore {
         if staff();
 
 
-
       // =======================================
       // CUSTOMER UPDATE
-      // =======================================
-      //
-      // Customer can modify their own unpaid
-      // order.
-      //
-      // This is intentionally restricted.
-      //
       // =======================================
 
       allow update:
@@ -209,15 +292,27 @@ service cloud.firestore {
         request.resource.data.customerUid ==
           resource.data.customerUid
 
+        // -------------------------------------
+        // TABLE CANNOT CHANGE
+        // -------------------------------------
+
         &&
 
         request.resource.data.table ==
           resource.data.table
 
+        // -------------------------------------
+        // SESSION CANNOT CHANGE
+        // -------------------------------------
+
         &&
 
         request.resource.data.tableSessionId ==
           resource.data.tableSessionId
+
+        // -------------------------------------
+        // PAYMENT CANNOT BE CHANGED
+        // -------------------------------------
 
         &&
 
@@ -239,6 +334,10 @@ service cloud.firestore {
         request.resource.data.paidAt ==
           null
 
+        // -------------------------------------
+        // ORDER STATUS
+        // -------------------------------------
+
         &&
 
         resource.data.status !=
@@ -248,6 +347,10 @@ service cloud.firestore {
 
         request.resource.data.status ==
           "Pending"
+
+        // -------------------------------------
+        // ONLY ALLOWED FIELDS MAY CHANGE
+        // -------------------------------------
 
         &&
 
@@ -264,7 +367,6 @@ service cloud.firestore {
         ]);
 
 
-
       // =======================================
       // DELETE
       // =======================================
@@ -275,7 +377,6 @@ service cloud.firestore {
     }
 
 
-
     // =========================================
     // DENY EVERYTHING ELSE
     // =========================================
@@ -284,9 +385,7 @@ service cloud.firestore {
 
       allow read, write:
         if false;
-
     }
 
   }
-
 }
