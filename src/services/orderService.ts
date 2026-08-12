@@ -8,11 +8,15 @@ import {
   orderBy,
   query,
   runTransaction,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
 
-import { db } from "./firebase";
+import {
+  db,
+  customerDb,
+} from "./firebase";
 
 import type {
   Order,
@@ -31,6 +35,13 @@ const ordersCollection =
     db,
     "orders"
   );
+
+const customerOrdersCollection =
+  collection(
+    customerDb,
+    "orders"
+  );
+
 
 
 // =========================================
@@ -160,7 +171,7 @@ async function createOrder(
 
   const created =
     await addDoc(
-      ordersCollection,
+      customerOrdersCollection,
       orderData
     );
 
@@ -175,6 +186,7 @@ async function createOrder(
 // =========================================
 
 export const orderService = {
+
 
   // =======================================
   // CREATE ORDER
@@ -201,8 +213,11 @@ export const orderService = {
   // EXISTING ACTIVE SESSION:
   //     Add new batch to same order.
   //
-  // COMPLETED ORDER:
+  // COMPLETED + PAID:
   //     Create new order.
+  //
+  // COMPLETED + UNPAID:
+  //     Keep the same order and add batch.
   //
   // =======================================
 
@@ -257,7 +272,7 @@ export const orderService = {
 
     const existingOrderRef =
       doc(
-        db,
+        customerDb,
         "orders",
         existingOrderId
       );
@@ -266,7 +281,7 @@ export const orderService = {
     try {
 
       await runTransaction(
-        db,
+        customerDb,
         async (
           transaction
         ) => {
@@ -294,12 +309,10 @@ export const orderService = {
 
           const existingOrder =
             {
-
               ...(snapshot.data() as Order),
 
               id:
                 snapshot.id,
-
             };
 
 
@@ -336,12 +349,22 @@ export const orderService = {
 
 
           // ---------------------------------
-          // COMPLETED ORDER
+          // FULLY CLOSED ORDER
+          // ---------------------------------
+          //
+          // Completed + Paid means the order
+          // is financially and operationally
+          // closed.
+          //
+          // A Completed + Unpaid order remains
+          // available for payment.
           // ---------------------------------
 
           if (
             existingOrder.status ===
-            "Completed"
+              "Completed" &&
+            existingOrder.paymentStatus ===
+              "Paid"
           ) {
 
             throw new Error(
@@ -353,13 +376,6 @@ export const orderService = {
 
           // ---------------------------------
           // PAID ORDER
-          // ---------------------------------
-          //
-          // A paid order is financially closed.
-          // Never try to change Paid -> Unpaid.
-          // A later customer order must become
-          // a new order.
-          //
           // ---------------------------------
 
           if (
@@ -590,6 +606,64 @@ export const orderService = {
       }
 
 
+      // -------------------------------------
+      // STALE CUSTOMER ORDER ID
+      // -------------------------------------
+
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (
+          error as {
+            code?: string
+          }
+        ).code ===
+          "permission-denied"
+      ) {
+
+        localStorage.removeItem(
+          storageKey
+        );
+
+
+        if (
+          localStorage.getItem(
+            "activeOrderId"
+          ) ===
+          existingOrderId
+        ) {
+
+          localStorage.removeItem(
+            "activeOrderId"
+          );
+
+        }
+
+
+        const newOrderId =
+          await createOrder(
+            order
+          );
+
+
+        localStorage.setItem(
+          storageKey,
+          newOrderId
+        );
+
+
+        localStorage.setItem(
+          "activeOrderId",
+          newOrderId
+        );
+
+
+        return newOrderId;
+
+      }
+
+
       throw error;
 
     }
@@ -610,7 +684,7 @@ export const orderService = {
 
     const orderRef =
       doc(
-        db,
+        customerDb,
         "orders",
         orderId
       );
@@ -831,12 +905,23 @@ export const orderService = {
   // CLEAR TABLE
   // =======================================
   //
-  // Finds the latest active order for the
-  // specified table.
+  // IMPORTANT:
   //
-  // The order must already be Paid.
+  // This function ONLY changes the Firestore
+  // order status.
   //
-  // Then marks it Completed.
+  // It MUST NOT touch localStorage.
+  //
+  // The customer's browser is responsible
+  // for deciding when its active order should
+  // disappear.
+  //
+  // Completed + Unpaid:
+  //     Customer still needs payment.
+  //
+  // Completed + Paid:
+  //     Customer can finally lose the
+  //     active-order reference.
   //
   // =======================================
 
@@ -891,8 +976,11 @@ export const orderService = {
         )
         .filter(
           (order) =>
-            order.status !==
-            "Completed"
+            (
+              order as Order & {
+                tableCleared?: boolean;
+              }
+            ).tableCleared !== true
         )
         .sort(
           (a, b) =>
@@ -906,7 +994,8 @@ export const orderService = {
 
 
     if (
-      activeOrders.length === 0
+      activeOrders.length ===
+      0
     ) {
 
       throw new Error(
@@ -948,6 +1037,9 @@ export const orderService = {
       );
 
 
+    const clearedAt =
+      new Date().toISOString();
+
     await updateDoc(
       orderRef,
       {
@@ -955,41 +1047,47 @@ export const orderService = {
         status:
           "Completed",
 
+        tableCleared:
+          true,
+
+        tableClearedAt:
+          clearedAt,
+
       }
     );
 
+    // Persist table availability separately from the order.
+    // setDoc + merge also works if this table has never
+    // had a tableState document before.
+    await setDoc(
+      doc(
+        db,
+        "tableState",
+        `table-${tableNumber}`
+      ),
+      {
+        table:
+          tableNumber,
 
-    // ---------------------------------------
-    // Remove stale local active-order keys
-    // if this browser happens to be using
-    // the same table.
-    // ---------------------------------------
+        status:
+          "Available",
 
-    const storageKey =
-      `activeOrderId_table_${tableNumber}`;
+        clearedAt,
 
-
-    localStorage.removeItem(
-      storageKey
+        updatedAt:
+          clearedAt,
+      },
+      {
+        merge: true,
+      }
     );
 
+    // IMPORTANT:
+    // Do NOT remove anything from localStorage.
+    //
+    // The customer page keeps its payment/order
+    // reference until it sees Completed + Paid.
 
-    const activeOrderId =
-      localStorage.getItem(
-        "activeOrderId"
-      );
-
-
-    if (
-      activeOrderId ===
-      order.id
-    ) {
-
-      localStorage.removeItem(
-        "activeOrderId"
-      );
-
-    }
 
   },
 

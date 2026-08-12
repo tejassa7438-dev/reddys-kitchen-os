@@ -8,6 +8,11 @@ import {
 } from "react-router-dom";
 
 import {
+  customerAuth,
+  ensureCustomerAuth,
+} from "../../services/firebase";
+
+import {
   useCartStore,
 } from "../../store/cartStore";
 
@@ -18,11 +23,6 @@ import {
 import {
   orderService,
 } from "../../services/orderService";
-
-import {
-  auth,
-  ensureCustomerAuth,
-} from "../../services/firebase";
 
 import type {
   Order,
@@ -107,6 +107,10 @@ function CheckoutPage() {
   const placeOrder =
     async () => {
 
+      // ---------------------------------------
+      // EMPTY CART
+      // ---------------------------------------
+
       if (
         items.length === 0
       ) {
@@ -120,6 +124,49 @@ function CheckoutPage() {
       }
 
 
+      // ---------------------------------------
+      // TABLE
+      // ---------------------------------------
+
+      if (
+        !Number.isInteger(
+          table
+        ) ||
+        table < 1
+      ) {
+
+        alert(
+          "Table information is missing. Please reload the menu."
+        );
+
+        return;
+
+      }
+
+
+      // ---------------------------------------
+      // TABLE SESSION
+      // ---------------------------------------
+
+      if (
+        !tableSessionId ||
+        typeof tableSessionId !==
+          "string"
+      ) {
+
+        alert(
+          "Table session not found. Please reload the menu."
+        );
+
+        return;
+
+      }
+
+
+      // ---------------------------------------
+      // CUSTOMER NAME
+      // ---------------------------------------
+
       if (
         !customerName.trim()
       ) {
@@ -132,6 +179,10 @@ function CheckoutPage() {
 
       }
 
+
+      // ---------------------------------------
+      // PREVENT DOUBLE CLICK
+      // ---------------------------------------
 
       if (
         placingOrder
@@ -150,22 +201,31 @@ function CheckoutPage() {
       try {
 
         // =====================================
-        // ENSURE CUSTOMER AUTHENTICATION
+        // CUSTOMER AUTHENTICATION
+        // =====================================
+        //
+        // IMPORTANT:
+        //
+        // ONLY customerAuth is used here.
+        //
+        // Never use staff auth.
+        //
         // =====================================
 
-        await ensureCustomerAuth();
+        const customerUid =
+          await ensureCustomerAuth();
+
+
+        const currentCustomer =
+          customerAuth.currentUser;
 
 
         // =====================================
-        // GET THE CURRENT AUTHENTICATED USER
+        // VERIFY CUSTOMER SESSION
         // =====================================
-
-        const currentUser =
-          auth.currentUser;
-
 
         if (
-          !currentUser
+          !currentCustomer
         ) {
 
           throw new Error(
@@ -175,43 +235,35 @@ function CheckoutPage() {
         }
 
 
-        // =====================================
-        // CUSTOMER MUST BE ANONYMOUS
-        // =====================================
-
         if (
-          !currentUser.isAnonymous
+          !currentCustomer.isAnonymous
         ) {
 
           throw new Error(
-            "Invalid customer session. Please reload the menu."
+            "Customer session is invalid. Please reload the menu."
           );
 
         }
 
 
         // =====================================
-        // THIS IS THE ONLY UID USED FOR ORDER
+        // VERIFY UID
         // =====================================
 
-        const customerUid =
-          currentUser.uid;
-
-
-        console.log(
-          "CURRENT CUSTOMER UID:",
+        if (
+          currentCustomer.uid !==
           customerUid
-        );
+        ) {
 
+          throw new Error(
+            "Customer authentication changed. Please reload the menu."
+          );
 
-        console.log(
-          "AUTH ANONYMOUS:",
-          currentUser.isAnonymous
-        );
+        }
 
 
         // =====================================
-        // CREATE ORDER ITEMS
+        // CART → ORDER ITEMS
         // =====================================
 
         const orderItems:
@@ -220,7 +272,9 @@ function CheckoutPage() {
             (item) => ({
 
               id:
-                String(item.id),
+                String(
+                  item.id
+                ),
 
               name:
                 item.name,
@@ -236,13 +290,17 @@ function CheckoutPage() {
 
 
         // =====================================
-        // CREATE BATCH
+        // CREATED TIME
         // =====================================
 
         const createdAt =
           new Date()
             .toISOString();
 
+
+        // =====================================
+        // FIRST BATCH
+        // =====================================
 
         const batch = {
 
@@ -261,20 +319,26 @@ function CheckoutPage() {
 
 
         // =====================================
-        // CREATE ORDER
+        // BUILD ORDER
         // =====================================
 
         const order:
           Order = {
 
           id:
-            Date.now().toString(),
+            Date.now()
+              .toString(),
 
           table,
 
           tableSessionId,
 
-          customerUid,
+          // IMPORTANT:
+          // This UID comes directly from
+          // customerAuth.
+
+          customerUid:
+            currentCustomer.uid,
 
           customerName:
             customerName.trim(),
@@ -315,35 +379,47 @@ function CheckoutPage() {
         // =====================================
 
         console.log(
-          "PLACING ORDER CUSTOMER UID:",
+          "========== CUSTOMER ORDER =========="
+        );
+
+
+        console.log(
+          "Customer UID:",
+          currentCustomer.uid
+        );
+
+
+        console.log(
+          "Order UID:",
           order.customerUid
         );
 
 
         console.log(
-          "CURRENT FIREBASE UID:",
-          auth.currentUser?.uid
+          "Anonymous:",
+          currentCustomer.isAnonymous
+        );
+
+
+        console.log(
+          "Table:",
+          order.table
+        );
+
+
+        console.log(
+          "Table Session:",
+          order.tableSessionId
+        );
+
+
+        console.log(
+          "===================================="
         );
 
 
         // =====================================
-        // SAFETY CHECK
-        // =====================================
-
-        if (
-          order.customerUid !==
-          auth.currentUser?.uid
-        ) {
-
-          throw new Error(
-            "Customer authentication changed while placing the order. Please try again."
-          );
-
-        }
-
-
-        // =====================================
-        // PLACE ORDER
+        // CREATE / APPEND ORDER
         // =====================================
 
         const orderId =
@@ -376,7 +452,7 @@ function CheckoutPage() {
 
 
         // =====================================
-        // OPEN TRACKING
+        // OPEN ORDER TRACKING
         // =====================================
 
         navigate(
@@ -392,7 +468,7 @@ function CheckoutPage() {
       ) {
 
         console.error(
-          "Firebase Error:",
+          "Customer order error:",
           error
         );
 
@@ -401,9 +477,65 @@ function CheckoutPage() {
           error instanceof Error
         ) {
 
-          alert(
+          switch (
             error.message
-          );
+          ) {
+
+            case "ORDER_OWNER_MISMATCH":
+
+              alert(
+                "This order belongs to another customer session. Please reload the menu."
+              );
+
+              break;
+
+
+            case "TABLE_SESSION_MISMATCH":
+
+              alert(
+                "This table session has changed. Please reload the menu."
+              );
+
+              break;
+
+
+            case "ORDER_ALREADY_COMPLETED":
+
+              alert(
+                "That order has already been completed. A new order will be created."
+              );
+
+              break;
+
+
+            case "ORDER_ALREADY_PAID":
+
+              alert(
+                "That order has already been paid. A new order will be created."
+              );
+
+              break;
+
+
+            case "EXISTING_ORDER_NOT_FOUND":
+
+              alert(
+                "The previous order could not be found. Please try again."
+              );
+
+              break;
+
+
+            default:
+
+              alert(
+                error.message ||
+                "Unable to place your order. Please try again."
+              );
+
+              break;
+
+          }
 
         } else {
 
@@ -434,6 +566,8 @@ function CheckoutPage() {
 
       <div className="max-w-3xl mx-auto">
 
+        {/* BACK */}
+
         <button
           type="button"
           onClick={() =>
@@ -444,6 +578,8 @@ function CheckoutPage() {
           ← Back to Cart
         </button>
 
+
+        {/* HEADER */}
 
         <h1 className="text-4xl font-bold text-red-600">
           Checkout
@@ -472,7 +608,9 @@ function CheckoutPage() {
               value={
                 customerName
               }
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setCustomerName(
                   event.target.value
                 )
@@ -505,7 +643,9 @@ function CheckoutPage() {
               value={
                 phone
               }
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setPhone(
                   event.target.value
                 )
@@ -538,7 +678,9 @@ function CheckoutPage() {
               value={
                 instructions
               }
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setInstructions(
                   event.target.value
                 )
@@ -563,7 +705,8 @@ function CheckoutPage() {
           </h2>
 
 
-          {items.length === 0 ? (
+          {items.length ===
+          0 ? (
 
             <p className="text-gray-400">
               Your cart is empty.

@@ -9,24 +9,32 @@ import {
   useSearchParams,
 } from "react-router-dom";
 
-import {
-  signInAnonymously,
-  signOut,
-} from "firebase/auth";
-
 import FoodCard from "../../components/menu/FoodCard";
 import SearchBar from "../../components/menu/SearchBar";
 import CategoryTabs from "../../components/menu/CategoryTabs";
 import CartSummary from "../../components/cart/CartSummary";
 
-import { menuService } from "../../services/menuService";
-import { orderService } from "../../services/orderService";
+import {
+  menuService,
+} from "../../services/menuService";
 
-import { auth } from "../../services/firebase";
+import {
+  orderService,
+} from "../../services/orderService";
 
-import type { MenuItem } from "../../types/menu";
+import {
+  customerAuth,
+  ensureCustomerAuth,
+} from "../../services/firebase";
 
-import { useTableStore } from "../../store/tableStore";
+import type {
+  MenuItem,
+} from "../../types/menu";
+
+import {
+  useTableStore,
+} from "../../store/tableStore";
+
 
 
 function MenuPage() {
@@ -35,8 +43,11 @@ function MenuPage() {
     useNavigate();
 
 
-  const [searchParams] =
+  const [
+    searchParams,
+  ] =
     useSearchParams();
+
 
 
   // =========================================
@@ -57,6 +68,7 @@ function MenuPage() {
     );
 
 
+
   // =========================================
   // CUSTOMER AUTH STATE
   // =========================================
@@ -73,6 +85,7 @@ function MenuPage() {
     setCustomerAuthError,
   ] =
     useState("");
+
 
 
   // =========================================
@@ -109,6 +122,7 @@ function MenuPage() {
     useState("All");
 
 
+
   // =========================================
   // ACTIVE ORDER STATE
   // =========================================
@@ -122,8 +136,17 @@ function MenuPage() {
     );
 
 
+
   // =========================================
   // CUSTOMER AUTHENTICATION
+  // =========================================
+  //
+  // Customer uses customerAuth.
+  //
+  // Staff/Kitchen/Admin use auth.
+  //
+  // Never sign the staff account out here.
+  //
   // =========================================
 
   useEffect(() => {
@@ -136,63 +159,31 @@ function MenuPage() {
 
         try {
 
-          setCustomerAuthError(
-            ""
-          );
+          setCustomerAuthError("");
+
+
+          await ensureCustomerAuth();
 
 
           const currentUser =
-            auth.currentUser;
+            customerAuth.currentUser;
 
-
-          // -----------------------------------
-          // Already anonymous customer
-          // -----------------------------------
 
           if (
-            currentUser &&
-            currentUser.isAnonymous
-          ) {
-
-            if (!cancelled) {
-
-              setCustomerAuthReady(
-                true
-              );
-
-            }
-
-            return;
-
-          }
-
-
-          // -----------------------------------
-          // Staff account is currently signed in
-          // -----------------------------------
-
-          if (
-            currentUser &&
+            !currentUser ||
             !currentUser.isAnonymous
           ) {
 
-            await signOut(
-              auth
+            throw new Error(
+              "Customer session could not be established."
             );
 
           }
 
 
-          // -----------------------------------
-          // Create anonymous customer session
-          // -----------------------------------
-
-          await signInAnonymously(
-            auth
-          );
-
-
-          if (!cancelled) {
+          if (
+            !cancelled
+          ) {
 
             setCustomerAuthReady(
               true
@@ -210,7 +201,9 @@ function MenuPage() {
           );
 
 
-          if (!cancelled) {
+          if (
+            !cancelled
+          ) {
 
             setCustomerAuthReady(
               false
@@ -240,6 +233,7 @@ function MenuPage() {
   }, []);
 
 
+
   // =========================================
   // READ TABLE NUMBER FROM URL
   // =========================================
@@ -252,7 +246,9 @@ function MenuPage() {
       );
 
 
-    if (!tableParam) {
+    if (
+      !tableParam
+    ) {
 
       return;
 
@@ -260,7 +256,9 @@ function MenuPage() {
 
 
     const parsedTable =
-      Number(tableParam);
+      Number(
+        tableParam
+      );
 
 
     if (
@@ -280,6 +278,7 @@ function MenuPage() {
     searchParams,
     setTable,
   ]);
+
 
 
   // =========================================
@@ -310,8 +309,28 @@ function MenuPage() {
   }, []);
 
 
+
   // =========================================
   // ACTIVE ORDER TRACKING
+  // =========================================
+  //
+  // IMPORTANT:
+  //
+  // The current order remains visible on the
+  // Menu page even after it becomes Completed.
+  //
+  // The order is removed from the Menu page
+  // ONLY when the Firestore document no longer
+  // exists.
+  //
+  // This means:
+  //
+  // Pending       -> KEEP
+  // Preparing     -> KEEP
+  // Ready         -> KEEP
+  // Completed     -> KEEP
+  // Completed+Paid-> KEEP
+  //
   // =========================================
 
   useEffect(() => {
@@ -325,7 +344,9 @@ function MenuPage() {
     }
 
 
-    if (!table) {
+    if (
+      !table
+    ) {
 
       setActiveOrderId(
         null
@@ -350,7 +371,9 @@ function MenuPage() {
     // No active order
     // -----------------------------------------
 
-    if (!storedOrderId) {
+    if (
+      !storedOrderId
+    ) {
 
       setActiveOrderId(
         null
@@ -383,44 +406,14 @@ function MenuPage() {
           // -----------------------------------
           // Order no longer exists
           // -----------------------------------
-
-          if (!order) {
-
-            localStorage.removeItem(
-              storageKey
-            );
-
-
-            if (
-              localStorage.getItem(
-                "activeOrderId"
-              ) ===
-              storedOrderId
-            ) {
-
-              localStorage.removeItem(
-                "activeOrderId"
-              );
-
-            }
-
-
-            setActiveOrderId(
-              null
-            );
-
-            return;
-
-          }
-
-
-          // -----------------------------------
-          // ORDER COMPLETED
+          //
+          // ONLY in this situation do we remove
+          // the current order reference.
+          //
           // -----------------------------------
 
           if (
-            order.status ===
-            "Completed"
+            !order
           ) {
 
             localStorage.removeItem(
@@ -446,13 +439,19 @@ function MenuPage() {
               null
             );
 
+
             return;
 
           }
 
 
           // -----------------------------------
-          // ORDER STILL ACTIVE
+          // ORDER STILL EXISTS
+          // -----------------------------------
+          //
+          // Keep the button visible regardless
+          // of order status or payment status.
+          //
           // -----------------------------------
 
           setActiveOrderId(
@@ -469,6 +468,8 @@ function MenuPage() {
     table,
     customerAuthReady,
   ]);
+
+
 
 
   // =========================================
@@ -510,6 +511,8 @@ function MenuPage() {
       search,
       selectedCategory,
     ]);
+
+
 
 
   // =========================================
@@ -560,6 +563,7 @@ function MenuPage() {
   }
 
 
+
   // =========================================
   // WAIT FOR CUSTOMER AUTH
   // =========================================
@@ -597,11 +601,14 @@ function MenuPage() {
   }
 
 
+
   // =========================================
   // LOADING MENU
   // =========================================
 
-  if (loading) {
+  if (
+    loading
+  ) {
 
     return (
 
@@ -632,6 +639,7 @@ function MenuPage() {
   }
 
 
+
   // =========================================
   // MENU PAGE
   // =========================================
@@ -639,6 +647,7 @@ function MenuPage() {
   return (
 
     <div className="min-h-screen bg-black text-white">
+
 
       {/* =================================== */}
       {/* HEADER */}
@@ -649,6 +658,9 @@ function MenuPage() {
         <div className="max-w-6xl mx-auto px-5 py-6">
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+
+            {/* RESTAURANT NAME */}
 
             <div>
 
@@ -669,8 +681,9 @@ function MenuPage() {
             </div>
 
 
+
             {/* ================================= */}
-            {/* CURRENT ORDER BUTTON */}
+            {/* CURRENT ORDER */}
             {/* ================================= */}
 
             {activeOrderId && (
@@ -698,11 +711,13 @@ function MenuPage() {
       </div>
 
 
+
       {/* =================================== */}
       {/* MAIN CONTENT */}
       {/* =================================== */}
 
       <div className="max-w-6xl mx-auto px-5 py-6">
+
 
         {/* SEARCH */}
 
@@ -718,6 +733,7 @@ function MenuPage() {
           />
 
         </div>
+
 
 
         {/* CATEGORIES */}
@@ -736,9 +752,8 @@ function MenuPage() {
         </div>
 
 
-        {/* ================================= */}
+
         {/* MENU ITEMS */}
-        {/* ================================= */}
 
         <div className="mt-8 grid gap-5 pb-32">
 
@@ -789,6 +804,7 @@ function MenuPage() {
         </div>
 
       </div>
+
 
 
       {/* =================================== */}

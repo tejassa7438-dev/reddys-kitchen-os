@@ -22,6 +22,7 @@ import type {
 } from "../../types/order";
 
 
+
 // =========================================
 // RESTAURANT UPI
 // =========================================
@@ -31,6 +32,7 @@ const RESTAURANT_UPI_ID =
 
 const RESTAURANT_NAME =
   "REDDY'S KITCHEN";
+
 
 
 // =========================================
@@ -65,12 +67,14 @@ function TrackOrderPage() {
   ] = useState(false);
 
 
+
   // =========================================
   // TRACKING
   // =========================================
 
   const previousTrackingStatusRef =
     useRef<string | null>(null);
+
 
 
   // =========================================
@@ -147,6 +151,7 @@ function TrackOrderPage() {
   };
 
 
+
   // =========================================
   // LIVE ORDER
   // =========================================
@@ -181,20 +186,42 @@ function TrackOrderPage() {
   }, [orderId]);
 
 
+
   // =========================================
-  // REMOVE COMPLETED ORDER FROM ACTIVE ORDER
+  // IMPORTANT
   // =========================================
   //
-  // IMPORTANT:
-  // Checkout stores BOTH:
+  // DO NOT REMOVE THE ACTIVE ORDER WHEN THE
+  // KITCHEN MARKS IT COMPLETED.
   //
-  // activeOrderId
-  // activeOrderId_table_X
+  // The customer must still be able to return
+  // to the order from the Menu page.
   //
-  // Therefore both must be removed when
-  // the kitchen completes the order.
+  // The active order remains available after:
   //
-  // This is independent of payment.
+  // Pending
+  // Preparing
+  // Ready
+  // Completed
+  //
+  // The Menu page will continue to show:
+  //
+  // "View Current Order"
+  //
+  // =========================================
+
+
+
+  // =========================================
+  // CLEAR ACTIVE ORDER AFTER PAYMENT
+  // =========================================
+  //
+  // Completed by kitchen alone does NOT clear
+  // the active order.
+  //
+  // Only Completed + Paid clears it, so the
+  // Menu page keeps "View Current Order" while
+  // payment is still pending.
   //
   // =========================================
 
@@ -208,24 +235,25 @@ function TrackOrderPage() {
 
 
     if (
-      order.status ===
-      "Completed"
+      order.status === "Completed" &&
+      order.paymentStatus === "Paid"
     ) {
 
-      // Remove global active order.
       localStorage.removeItem(
         "activeOrderId"
       );
 
 
-      // Remove table-specific active order.
       localStorage.removeItem(
         `activeOrderId_table_${order.table}`
       );
 
     }
 
-  }, [order]);
+  }, [
+    order,
+  ]);
+
 
 
   // =========================================
@@ -266,6 +294,7 @@ function TrackOrderPage() {
           : order.status;
 
 
+
   // =========================================
   // READY NOTIFICATION
   // =========================================
@@ -301,6 +330,7 @@ function TrackOrderPage() {
   }, [trackingStatus]);
 
 
+
   // =========================================
   // STOP AUDIO
   // =========================================
@@ -314,6 +344,7 @@ function TrackOrderPage() {
     };
 
   }, []);
+
 
 
   // =========================================
@@ -360,6 +391,7 @@ function TrackOrderPage() {
     );
 
   };
+
 
 
   // =========================================
@@ -428,6 +460,7 @@ function TrackOrderPage() {
   };
 
 
+
   // =========================================
   // PHONEPE
   // =========================================
@@ -492,6 +525,7 @@ function TrackOrderPage() {
       url;
 
   };
+
 
 
   // =========================================
@@ -560,6 +594,7 @@ function TrackOrderPage() {
   };
 
 
+
   // =========================================
   // SHOW QR
   // =========================================
@@ -581,6 +616,7 @@ function TrackOrderPage() {
   };
 
 
+
   // =========================================
   // UPI QR VALUE
   // =========================================
@@ -589,6 +625,7 @@ function TrackOrderPage() {
     order
       ? getUPIPaymentUrl()
       : "";
+
 
 
   // =========================================
@@ -626,6 +663,7 @@ function TrackOrderPage() {
   }
 
 
+
   // =========================================
   // STATUS COLOR
   // =========================================
@@ -656,6 +694,7 @@ function TrackOrderPage() {
   };
 
 
+
   // =========================================
   // PAYMENT PENDING
   // =========================================
@@ -668,6 +707,7 @@ function TrackOrderPage() {
       "Paid";
 
 
+
   // =========================================
   // UI
   // =========================================
@@ -675,6 +715,7 @@ function TrackOrderPage() {
   return (
 
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center px-5 py-10">
+
 
       {/* HEADER */}
 
@@ -688,9 +729,11 @@ function TrackOrderPage() {
       </p>
 
 
+
       {/* ORDER CARD */}
 
       <div className="bg-zinc-900 rounded-3xl mt-10 p-8 w-full max-w-2xl border border-zinc-800">
+
 
         {/* TABLE */}
 
@@ -712,6 +755,7 @@ function TrackOrderPage() {
         </p>
 
 
+
         {/* CURRENT STATUS */}
 
         <div className="mt-10">
@@ -728,6 +772,7 @@ function TrackOrderPage() {
           </h1>
 
         </div>
+
 
 
         {/* PAYMENT PENDING */}
@@ -749,6 +794,7 @@ function TrackOrderPage() {
 
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
 
+
               {/* Google Pay */}
 
               <button
@@ -760,6 +806,7 @@ function TrackOrderPage() {
               >
                 🟢 Google Pay
               </button>
+
 
 
               {/* PhonePe */}
@@ -775,6 +822,7 @@ function TrackOrderPage() {
               </button>
 
 
+
               {/* Paytm */}
 
               <button
@@ -786,6 +834,7 @@ function TrackOrderPage() {
               >
                 🔵 Paytm
               </button>
+
 
 
               {/* QR */}
@@ -801,6 +850,7 @@ function TrackOrderPage() {
               </button>
 
             </div>
+
 
 
             {/* QR CODE */}
@@ -849,6 +899,7 @@ function TrackOrderPage() {
             )}
 
 
+
             {/* CASH */}
 
             <div className="mt-4">
@@ -860,6 +911,7 @@ function TrackOrderPage() {
             </div>
 
 
+
             {/* ERROR */}
 
             {upiError && (
@@ -869,6 +921,7 @@ function TrackOrderPage() {
               </div>
 
             )}
+
 
 
             {/* AMOUNT */}
@@ -889,6 +942,7 @@ function TrackOrderPage() {
           </div>
 
         )}
+
 
 
         {/* PAYMENT COMPLETED */}
@@ -927,13 +981,16 @@ function TrackOrderPage() {
         )}
 
 
+
         {/* STATUS PROGRESS */}
 
         <div className="mt-8">
 
+
           {/* Status labels */}
 
           <div className="grid grid-cols-4 gap-2">
+
 
             {/* Pending */}
 
@@ -961,6 +1018,7 @@ function TrackOrderPage() {
             </div>
 
 
+
             {/* Preparing */}
 
             <div className="text-center">
@@ -985,6 +1043,7 @@ function TrackOrderPage() {
             </div>
 
 
+
             {/* Ready */}
 
             <div className="text-center">
@@ -1007,6 +1066,7 @@ function TrackOrderPage() {
             </div>
 
 
+
             {/* Completed */}
 
             <div className="text-center">
@@ -1027,6 +1087,7 @@ function TrackOrderPage() {
             </div>
 
           </div>
+
 
 
           {/* Progressive Bar */}
@@ -1063,6 +1124,7 @@ function TrackOrderPage() {
                           : "0%",
               }}
             />
+
 
 
             {/* Progress dots */}
@@ -1135,6 +1197,7 @@ function TrackOrderPage() {
         </div>
 
 
+
         {/* ORDERED ITEMS */}
 
         <div className="mt-10">
@@ -1176,6 +1239,7 @@ function TrackOrderPage() {
         </div>
 
 
+
         {/* TOTAL */}
 
         <div className="border-t border-zinc-700 mt-8 pt-6 flex justify-between">
@@ -1190,6 +1254,7 @@ function TrackOrderPage() {
           </span>
 
         </div>
+
 
 
         {/* COMPLETED MESSAGE */}
@@ -1214,6 +1279,7 @@ function TrackOrderPage() {
         )}
 
       </div>
+
 
 
       {/* BACK HOME */}

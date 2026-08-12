@@ -8,6 +8,8 @@ import {
 
 import {
   getAuth,
+  setPersistence,
+  browserLocalPersistence,
   signInAnonymously,
 } from "firebase/auth";
 
@@ -52,17 +54,6 @@ const firebaseConfig = {
 // =========================================
 // STAFF / ADMIN APP
 // =========================================
-//
-// Default Firebase app.
-//
-// Used by:
-// - Staff Login
-// - Kitchen
-// - Admin
-// - Billing
-// - Table Management
-//
-// =========================================
 
 const app =
   initializeApp(
@@ -82,6 +73,15 @@ export const db =
 
 // =========================================
 // STAFF / ADMIN AUTH
+// =========================================
+//
+// Used by:
+// - Staff Login
+// - Kitchen
+// - Admin
+// - Billing
+// - Table Management
+//
 // =========================================
 
 export const auth =
@@ -109,6 +109,10 @@ export const functions =
 // Same Firebase project.
 // Separate authentication state.
 //
+// IMPORTANT:
+// This prevents customer anonymous auth
+// from logging out staff/admin auth.
+//
 // =========================================
 
 const customerApp =
@@ -129,16 +133,33 @@ export const customerAuth =
 
 
 // =========================================
-// CUSTOMER FIRESTORE
+// CUSTOMER AUTH PERSISTENCE
 // =========================================
 //
 // IMPORTANT:
 //
-// This Firestore instance belongs to the
-// customer Firebase app.
+// Keep the anonymous customer session in
+// browser local storage.
 //
-// Therefore requests made with this
-// instance use customerAuth credentials.
+// This prevents a new anonymous UID from
+// being created every time the customer
+// moves between Menu / Cart / Checkout.
+//
+// =========================================
+
+const customerPersistence =
+  setPersistence(
+    customerAuth,
+    browserLocalPersistence
+  );
+
+
+// =========================================
+// CUSTOMER FIRESTORE
+// =========================================
+//
+// Requests made using customerDb use the
+// customerAuth credentials.
 //
 // =========================================
 
@@ -153,6 +174,13 @@ export const customerDb =
 // =========================================
 
 export async function ensureCustomerAuth(): Promise<string> {
+
+  // ---------------------------------------
+  // Wait for persistence initialization
+  // ---------------------------------------
+
+  await customerPersistence;
+
 
   // ---------------------------------------
   // Existing customer session
