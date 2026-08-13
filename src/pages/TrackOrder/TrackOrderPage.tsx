@@ -395,10 +395,23 @@ function TrackOrderPage() {
 
 
   // =========================================
-  // GOOGLE PAY
+  // PAY WITH ANY UPI APP
+  // =========================================
+  //
+  // Uses the standard UPI payment URI instead of
+  // provider-specific gpay://, phonepe:// or
+  // paytmmp:// deep links.
+  //
+  // The device/UPI layer chooses the supported app.
+  //
+  // IMPORTANT:
+  // Launching UPI does NOT verify that money was received.
+  // Payment should still be confirmed by the staff/payment
+  // provider before the order is treated as paid.
+  //
   // =========================================
 
-  const handleGooglePay = () => {
+  const handleUPIPayment = () => {
 
     if (!order) {
 
@@ -428,66 +441,14 @@ function TrackOrderPage() {
     }
 
 
-    const transactionNote =
-      `REDDY'S KITCHEN - Table ${order.table}`;
+    const upiUrl =
+      getUPIPaymentUrl();
 
 
-    const url =
-      `gpay://upi/pay` +
-
-      `?pa=${encodeURIComponent(
-        RESTAURANT_UPI_ID
-      )}` +
-
-      `&pn=${encodeURIComponent(
-        RESTAURANT_NAME
-      )}` +
-
-      `&am=${encodeURIComponent(
-        amount.toFixed(2)
-      )}` +
-
-      `&cu=INR` +
-
-      `&tn=${encodeURIComponent(
-        transactionNote
-      )}`;
-
-
-    window.location.href =
-      url;
-
-  };
-
-
-
-  // =========================================
-  // PHONEPE
-  // =========================================
-
-  const handlePhonePe = () => {
-
-    if (!order) {
-
-      return;
-
-    }
-
-
-    setUpiError("");
-
-
-    const amount =
-      Number(order.total);
-
-
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
+    if (!upiUrl) {
 
       setUpiError(
-        "Invalid payment amount."
+        "Unable to create the UPI payment request."
       );
 
       return;
@@ -495,104 +456,10 @@ function TrackOrderPage() {
     }
 
 
-    const transactionNote =
-      `REDDY'S KITCHEN - Table ${order.table}`;
-
-
-    const url =
-      `phonepe://pay` +
-
-      `?pa=${encodeURIComponent(
-        RESTAURANT_UPI_ID
-      )}` +
-
-      `&pn=${encodeURIComponent(
-        RESTAURANT_NAME
-      )}` +
-
-      `&am=${encodeURIComponent(
-        amount.toFixed(2)
-      )}` +
-
-      `&cu=INR` +
-
-      `&tn=${encodeURIComponent(
-        transactionNote
-      )}`;
-
-
     window.location.href =
-      url;
+      upiUrl;
 
   };
-
-
-
-  // =========================================
-  // PAYTM
-  // =========================================
-
-  const handlePaytm = () => {
-
-    if (!order) {
-
-      return;
-
-    }
-
-
-    setUpiError("");
-
-
-    const amount =
-      Number(order.total);
-
-
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-
-      setUpiError(
-        "Invalid payment amount."
-      );
-
-      return;
-
-    }
-
-
-    const transactionNote =
-      `REDDY'S KITCHEN - Table ${order.table}`;
-
-
-    const url =
-      `paytmmp://pay` +
-
-      `?pa=${encodeURIComponent(
-        RESTAURANT_UPI_ID
-      )}` +
-
-      `&pn=${encodeURIComponent(
-        RESTAURANT_NAME
-      )}` +
-
-      `&am=${encodeURIComponent(
-        amount.toFixed(2)
-      )}` +
-
-      `&cu=INR` +
-
-      `&tn=${encodeURIComponent(
-        transactionNote
-      )}`;
-
-
-    window.location.href =
-      url;
-
-  };
-
 
 
   // =========================================
@@ -794,63 +661,32 @@ function TrackOrderPage() {
 
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
 
-
-              {/* Google Pay */}
-
-              <button
-                type="button"
-                onClick={
-                  handleGooglePay
-                }
-                className="bg-white text-black hover:bg-gray-200 active:bg-gray-300 px-4 py-3 rounded-xl font-bold transition"
-              >
-                🟢 Google Pay
-              </button>
-
-
-
-              {/* PhonePe */}
+              {/* Standard UPI Intent */}
 
               <button
                 type="button"
                 onClick={
-                  handlePhonePe
+                  handleUPIPayment
                 }
-                className="bg-purple-700 hover:bg-purple-800 active:bg-purple-900 text-white px-4 py-3 rounded-xl font-bold transition"
+                className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-4 py-4 rounded-xl font-bold transition"
               >
-                🟣 PhonePe
+                💳 Pay with any UPI app
               </button>
 
 
-
-              {/* Paytm */}
-
-              <button
-                type="button"
-                onClick={
-                  handlePaytm
-                }
-                className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-4 py-3 rounded-xl font-bold transition"
-              >
-                🔵 Paytm
-              </button>
-
-
-
-              {/* QR */}
+              {/* Show UPI QR */}
 
               <button
                 type="button"
                 onClick={
                   handleShowQR
                 }
-                className="bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-600 text-white px-4 py-3 rounded-xl font-bold transition"
+                className="bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-600 text-white px-4 py-4 rounded-xl font-bold transition"
               >
-                📷 Scan UPI QR
+                📷 Show UPI QR
               </button>
 
             </div>
-
 
 
             {/* QR CODE */}
@@ -891,7 +727,7 @@ function TrackOrderPage() {
 
 
                 <p className="text-zinc-500 text-xs mt-2">
-                  Scan this QR with any supported UPI app.
+                  Scan this QR with any supported UPI app to pay.
                 </p>
 
               </div>
